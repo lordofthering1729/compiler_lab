@@ -1,0 +1,5 @@
+  .text
+  .globl main
+main:
+  mv    a0, 123456
+  ret
