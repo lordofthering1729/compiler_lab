@@ -51,7 +51,6 @@ using namespace std;
 CompUnit
   : FuncDef {
     assert($1 != nullptr);
-    std::cerr << "[CompUnit] FuncDef ok\n";
     auto comp_unit = make_unique<CompUnitAST>();
     comp_unit->func_def = unique_ptr<BaseAST>($1);
     ast = move(comp_unit);
@@ -63,7 +62,6 @@ FuncDef
     assert($1 != nullptr);
     assert($2 != nullptr);
     assert($5 != nullptr);
-    std::cerr << "[FuncDef] FuncType, IDENT, Block ok\n";
     auto ast = new FuncDefAST();
     ast->func_type = unique_ptr<BaseAST>($1);
     ast->ident = *unique_ptr<string>($2);
@@ -74,7 +72,7 @@ FuncDef
 
 FuncType
   : INT {
-    std::cerr << "[FuncType] INT ok\n";
+    //std::cerr << "[FuncType] INT ok\n";
     auto ast = new FuncTypeAST();
     ast->type = "int";
     $$ = ast;
@@ -84,7 +82,7 @@ FuncType
 Block
   : '{' Stmt '}' {
     assert($2 != nullptr);
-    std::cerr << "[Block] Stmt ok\n";
+    //std::cerr << "[Block] Stmt ok\n";
     auto ast = new BlockAST();
     ast->stmt = unique_ptr<BaseAST>($2);
     $$ = ast;
@@ -94,7 +92,7 @@ Block
 Stmt
   : RETURN Exp ';' {
     assert($2 != nullptr);
-    std::cerr << "[Stmt] Exp ok\n";
+    //std::cerr << "[Stmt] Exp ok\n";
     auto ast = new StmtAST();
     ast->stmt = unique_ptr<BaseAST>($2);
     $$ = ast;
@@ -104,7 +102,7 @@ Stmt
 Exp
   : LOrExp { 
     assert($1 != nullptr);
-    std::cerr << "[Exp] LOrExp ok\n";
+    //std::cerr << "[Exp] LOrExp ok\n";
     auto ast = new ExpAST(); 
     ast->lor_exp = std::unique_ptr<BaseAST>($1); 
     $$ = ast;
@@ -114,7 +112,7 @@ Exp
 PrimaryExp
   : '(' Exp ')' { 
       assert($2 != nullptr);
-      std::cerr << "[PrimaryExp] (Exp) ok\n";
+      //std::cerr << "[PrimaryExp] (Exp) ok\n";
       auto ast = new PrimaryExpAST(); 
       ast->is_number = false; 
       ast->exp = std::unique_ptr<BaseAST>($2); 
@@ -122,7 +120,7 @@ PrimaryExp
     }
   | Number { 
       assert($1 != nullptr);
-      std::cerr << "[PrimaryExp] Number ok\n";
+      //std::cerr << "[PrimaryExp] Number ok\n";
       auto ast = new PrimaryExpAST(); 
       ast->is_number = true; 
       ast->number_value = dynamic_cast<NumberAST*>($1)->value; 
@@ -132,7 +130,7 @@ PrimaryExp
 
 Number
   : INT_CONST { 
-      std::cerr << "[Number] INT_CONST=" << $1 << "\n";
+      //std::cerr << "[Number] INT_CONST=" << $1 << "\n";
       auto ast = new NumberAST(); 
       ast->value = $1; 
       $$ = ast; 
@@ -142,13 +140,13 @@ Number
 UnaryExp
   : PrimaryExp { 
       assert($1 != nullptr);
-      std::cerr << "[UnaryExp] PrimaryExp ok\n";
+      //std::cerr << "[UnaryExp] PrimaryExp ok\n";
       $$ = $1; 
     }
   | UnaryOp UnaryExp { 
       assert($1 != nullptr);
       assert($2 != nullptr);
-      std::cerr << "[UnaryExp] UnaryOp=" << *$1 << " UnaryExp ok\n";
+      //std::cerr << "[UnaryExp] UnaryOp=" << *$1 << " UnaryExp ok\n";
       auto ast = new UnaryExpAST(); 
       ast->op = *$1; 
       ast->exp = std::unique_ptr<BaseAST>($2); 
@@ -157,21 +155,25 @@ UnaryExp
   ;
 
 UnaryOp
-  : '+' { std::cerr << "[UnaryOp] +\n"; $$ = new std::string("+"); }
-  | '-' { std::cerr << "[UnaryOp] -\n"; $$ = new std::string("-"); }
-  | '!' { std::cerr << "[UnaryOp] !\n"; $$ = new std::string("!"); }
+  : '+' { 
+    //std::cerr << "[UnaryOp] +\n"; 
+  $$ = new std::string("+"); }
+  | '-' { //std::cerr << "[UnaryOp] -\n"; 
+  $$ = new std::string("-"); }
+  | '!' { //std::cerr << "[UnaryOp] !\n"; 
+  $$ = new std::string("!"); }
   ;
 
 MulExp
   : UnaryExp { 
       assert($1 != nullptr);
-      std::cerr << "[MulExp] UnaryExp ok\n";
+      //std::cerr << "[MulExp] UnaryExp ok\n";
       $$ = $1; 
     }
   | MulExp '*' UnaryExp { 
       assert($1 != nullptr);
       assert($3 != nullptr);
-      std::cerr << "[MulExp] *\n";
+      //std::cerr << "[MulExp] *\n";
       auto ast = new BinaryExpAST(); 
       ast->op = "*"; 
       ast->lhs = std::unique_ptr<BaseAST>($1); 
@@ -181,7 +183,7 @@ MulExp
   | MulExp '/' UnaryExp { 
       assert($1 != nullptr);
       assert($3 != nullptr);
-      std::cerr << "[MulExp] /\n";
+      //std::cerr << "[MulExp] /\n";
       auto ast = new BinaryExpAST(); 
       ast->op = "/"; 
       ast->lhs = std::unique_ptr<BaseAST>($1); 
@@ -191,7 +193,7 @@ MulExp
   | MulExp '%' UnaryExp { 
       assert($1 != nullptr);
       assert($3 != nullptr);
-      std::cerr << "[MulExp] %\n";
+      //std::cerr << "[MulExp] %\n";
       auto ast = new BinaryExpAST(); 
       ast->op = "%"; 
       ast->lhs = std::unique_ptr<BaseAST>($1); 
@@ -203,13 +205,13 @@ MulExp
 AddExp
   : MulExp { 
       assert($1 != nullptr);
-      std::cerr << "[AddExp] MulExp ok\n";
+      //std::cerr << "[AddExp] MulExp ok\n";
       $$ = $1; 
     }
   | AddExp '+' MulExp { 
       assert($1 != nullptr);
       assert($3 != nullptr);
-      std::cerr << "[AddExp] +\n";
+      //std::cerr << "[AddExp] +\n";
       auto ast = new BinaryExpAST(); 
       ast->op = "+"; 
       ast->lhs = std::unique_ptr<BaseAST>($1); 
@@ -219,7 +221,7 @@ AddExp
   | AddExp '-' MulExp { 
       assert($1 != nullptr);
       assert($3 != nullptr);
-      std::cerr << "[AddExp] -\n";
+      //std::cerr << "[AddExp] -\n";
       auto ast = new BinaryExpAST(); 
       ast->op = "-"; 
       ast->lhs = std::unique_ptr<BaseAST>($1); 
@@ -231,13 +233,13 @@ AddExp
 RelExp
   : AddExp { 
       assert($1 != nullptr);
-      std::cerr << "[RelExp] AddExp ok\n";
+      //std::cerr << "[RelExp] AddExp ok\n";
       $$ = $1; 
     }
   | RelExp '<' AddExp { 
       assert($1 != nullptr);
       assert($3 != nullptr);
-      std::cerr << "[RelExp] <\n";
+      //std::cerr << "[RelExp] <\n";
       auto ast = new BinaryExpAST(); 
       ast->op = "<"; 
       ast->lhs = std::unique_ptr<BaseAST>($1); 
@@ -247,7 +249,7 @@ RelExp
   | RelExp '>' AddExp { 
       assert($1 != nullptr);
       assert($3 != nullptr);
-      std::cerr << "[RelExp] >\n";
+      //std::cerr << "[RelExp] >\n";
       auto ast = new BinaryExpAST(); 
       ast->op = ">"; 
       ast->lhs = std::unique_ptr<BaseAST>($1); 
@@ -257,7 +259,7 @@ RelExp
   | RelExp LE AddExp { 
       assert($1 != nullptr);
       assert($3 != nullptr);
-      std::cerr << "[RelExp] <=\n";
+      //std::cerr << "[RelExp] <=\n";
       auto ast = new BinaryExpAST(); 
       ast->op = "<="; 
       ast->lhs = std::unique_ptr<BaseAST>($1); 
@@ -267,7 +269,7 @@ RelExp
   | RelExp GE AddExp { 
       assert($1 != nullptr);
       assert($3 != nullptr);
-      std::cerr << "[RelExp] >=\n";
+      //std::cerr << "[RelExp] >=\n";
       auto ast = new BinaryExpAST(); 
       ast->op = ">="; 
       ast->lhs = std::unique_ptr<BaseAST>($1); 
@@ -279,13 +281,13 @@ RelExp
 EqExp
   : RelExp { 
       assert($1 != nullptr);
-      std::cerr << "[EqExp] RelExp ok\n";
+      //std::cerr << "[EqExp] RelExp ok\n";
       $$ = $1; 
     }
   | EqExp EQ RelExp { 
       assert($1 != nullptr);
       assert($3 != nullptr);
-      std::cerr << "[EqExp] ==\n";
+      //std::cerr << "[EqExp] ==\n";
       auto ast = new BinaryExpAST(); 
       ast->op = "=="; 
       ast->lhs = std::unique_ptr<BaseAST>($1); 
@@ -295,7 +297,7 @@ EqExp
   | EqExp NE RelExp { 
       assert($1 != nullptr);
       assert($3 != nullptr);
-      std::cerr << "[EqExp] !=\n";
+      //std::cerr << "[EqExp] !=\n";
       auto ast = new BinaryExpAST(); 
       ast->op = "!="; 
       ast->lhs = std::unique_ptr<BaseAST>($1); 
@@ -307,13 +309,13 @@ EqExp
 LAndExp
   : EqExp { 
       assert($1 != nullptr);
-      std::cerr << "[LAndExp] EqExp ok\n";
+      //std::cerr << "[LAndExp] EqExp ok\n";
       $$ = $1; 
     }
   | LAndExp AND EqExp { 
       assert($1 != nullptr);
       assert($3 != nullptr);
-      std::cerr << "[LAndExp] &&\n";
+      //std::cerr << "[LAndExp] &&\n";
       auto ast = new BinaryExpAST(); 
       ast->op = "&&"; 
       ast->lhs = std::unique_ptr<BaseAST>($1); 
@@ -325,13 +327,11 @@ LAndExp
 LOrExp
   : LAndExp { 
       assert($1 != nullptr);
-      std::cerr << "[LOrExp] LAndExp ok\n";
       $$ = $1; 
     }
   | LOrExp OR LAndExp { 
       assert($1 != nullptr);
       assert($3 != nullptr);
-      std::cerr << "[LOrExp] ||\n";
       auto ast = new BinaryExpAST(); 
       ast->op = "||"; 
       ast->lhs = std::unique_ptr<BaseAST>($1); 

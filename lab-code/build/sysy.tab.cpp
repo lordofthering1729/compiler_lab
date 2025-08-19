@@ -539,10 +539,10 @@ static const yytype_int8 yytranslate[] =
   /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
 static const yytype_int16 yyrline[] =
 {
-       0,    52,    52,    62,    76,    85,    95,   105,   115,   123,
-     134,   143,   148,   160,   161,   162,   166,   171,   181,   191,
-     204,   209,   219,   232,   237,   247,   257,   267,   280,   285,
-     295,   308,   313,   326,   331
+       0,    52,    52,    61,    74,    83,    93,   103,   113,   121,
+     132,   141,   146,   158,   161,   163,   168,   173,   183,   193,
+     206,   211,   221,   234,   239,   249,   259,   269,   282,   287,
+     297,   310,   315,   328,   332
 };
 #endif
 
@@ -1369,402 +1369,402 @@ yyreduce:
 #line 52 "/root/compiler/src/sysy.y"
             {
     assert((yyvsp[0].ast_val) != nullptr);
-    std::cerr << "[CompUnit] FuncDef ok\n";
     auto comp_unit = make_unique<CompUnitAST>();
     comp_unit->func_def = unique_ptr<BaseAST>((yyvsp[0].ast_val));
     ast = move(comp_unit);
   }
-#line 1378 "/root/compiler/build/sysy.tab.cpp"
+#line 1377 "/root/compiler/build/sysy.tab.cpp"
     break;
 
   case 3:
-#line 62 "/root/compiler/src/sysy.y"
+#line 61 "/root/compiler/src/sysy.y"
                                  {
     assert((yyvsp[-4].ast_val) != nullptr);
     assert((yyvsp[-3].str_val) != nullptr);
     assert((yyvsp[0].ast_val) != nullptr);
-    std::cerr << "[FuncDef] FuncType, IDENT, Block ok\n";
     auto ast = new FuncDefAST();
     ast->func_type = unique_ptr<BaseAST>((yyvsp[-4].ast_val));
     ast->ident = *unique_ptr<string>((yyvsp[-3].str_val));
     ast->block = unique_ptr<BaseAST>((yyvsp[0].ast_val));
     (yyval.ast_val) = ast;
   }
-#line 1394 "/root/compiler/build/sysy.tab.cpp"
+#line 1392 "/root/compiler/build/sysy.tab.cpp"
     break;
 
   case 4:
-#line 76 "/root/compiler/src/sysy.y"
+#line 74 "/root/compiler/src/sysy.y"
         {
-    std::cerr << "[FuncType] INT ok\n";
+    //std::cerr << "[FuncType] INT ok\n";
     auto ast = new FuncTypeAST();
     ast->type = "int";
     (yyval.ast_val) = ast;
   }
-#line 1405 "/root/compiler/build/sysy.tab.cpp"
+#line 1403 "/root/compiler/build/sysy.tab.cpp"
     break;
 
   case 5:
-#line 85 "/root/compiler/src/sysy.y"
+#line 83 "/root/compiler/src/sysy.y"
                  {
     assert((yyvsp[-1].ast_val) != nullptr);
-    std::cerr << "[Block] Stmt ok\n";
+    //std::cerr << "[Block] Stmt ok\n";
     auto ast = new BlockAST();
     ast->stmt = unique_ptr<BaseAST>((yyvsp[-1].ast_val));
     (yyval.ast_val) = ast;
   }
-#line 1417 "/root/compiler/build/sysy.tab.cpp"
+#line 1415 "/root/compiler/build/sysy.tab.cpp"
     break;
 
   case 6:
-#line 95 "/root/compiler/src/sysy.y"
+#line 93 "/root/compiler/src/sysy.y"
                    {
     assert((yyvsp[-1].ast_val) != nullptr);
-    std::cerr << "[Stmt] Exp ok\n";
+    //std::cerr << "[Stmt] Exp ok\n";
     auto ast = new StmtAST();
     ast->stmt = unique_ptr<BaseAST>((yyvsp[-1].ast_val));
     (yyval.ast_val) = ast;
   }
-#line 1429 "/root/compiler/build/sysy.tab.cpp"
+#line 1427 "/root/compiler/build/sysy.tab.cpp"
     break;
 
   case 7:
-#line 105 "/root/compiler/src/sysy.y"
+#line 103 "/root/compiler/src/sysy.y"
            { 
     assert((yyvsp[0].ast_val) != nullptr);
-    std::cerr << "[Exp] LOrExp ok\n";
+    //std::cerr << "[Exp] LOrExp ok\n";
     auto ast = new ExpAST(); 
     ast->lor_exp = std::unique_ptr<BaseAST>((yyvsp[0].ast_val)); 
     (yyval.ast_val) = ast;
   }
-#line 1441 "/root/compiler/build/sysy.tab.cpp"
+#line 1439 "/root/compiler/build/sysy.tab.cpp"
     break;
 
   case 8:
-#line 115 "/root/compiler/src/sysy.y"
+#line 113 "/root/compiler/src/sysy.y"
                 { 
       assert((yyvsp[-1].ast_val) != nullptr);
-      std::cerr << "[PrimaryExp] (Exp) ok\n";
+      //std::cerr << "[PrimaryExp] (Exp) ok\n";
       auto ast = new PrimaryExpAST(); 
       ast->is_number = false; 
       ast->exp = std::unique_ptr<BaseAST>((yyvsp[-1].ast_val)); 
       (yyval.ast_val) = ast; 
     }
-#line 1454 "/root/compiler/build/sysy.tab.cpp"
+#line 1452 "/root/compiler/build/sysy.tab.cpp"
     break;
 
   case 9:
-#line 123 "/root/compiler/src/sysy.y"
+#line 121 "/root/compiler/src/sysy.y"
            { 
       assert((yyvsp[0].ast_val) != nullptr);
-      std::cerr << "[PrimaryExp] Number ok\n";
+      //std::cerr << "[PrimaryExp] Number ok\n";
       auto ast = new PrimaryExpAST(); 
       ast->is_number = true; 
       ast->number_value = dynamic_cast<NumberAST*>((yyvsp[0].ast_val))->value; 
       (yyval.ast_val) = ast; 
     }
-#line 1467 "/root/compiler/build/sysy.tab.cpp"
+#line 1465 "/root/compiler/build/sysy.tab.cpp"
     break;
 
   case 10:
-#line 134 "/root/compiler/src/sysy.y"
+#line 132 "/root/compiler/src/sysy.y"
               { 
-      std::cerr << "[Number] INT_CONST=" << (yyvsp[0].int_val) << "\n";
+      //std::cerr << "[Number] INT_CONST=" << $1 << "\n";
       auto ast = new NumberAST(); 
       ast->value = (yyvsp[0].int_val); 
       (yyval.ast_val) = ast; 
     }
-#line 1478 "/root/compiler/build/sysy.tab.cpp"
+#line 1476 "/root/compiler/build/sysy.tab.cpp"
     break;
 
   case 11:
-#line 143 "/root/compiler/src/sysy.y"
+#line 141 "/root/compiler/src/sysy.y"
                { 
       assert((yyvsp[0].ast_val) != nullptr);
-      std::cerr << "[UnaryExp] PrimaryExp ok\n";
+      //std::cerr << "[UnaryExp] PrimaryExp ok\n";
       (yyval.ast_val) = (yyvsp[0].ast_val); 
     }
-#line 1488 "/root/compiler/build/sysy.tab.cpp"
+#line 1486 "/root/compiler/build/sysy.tab.cpp"
     break;
 
   case 12:
-#line 148 "/root/compiler/src/sysy.y"
+#line 146 "/root/compiler/src/sysy.y"
                      { 
       assert((yyvsp[-1].str_val) != nullptr);
       assert((yyvsp[0].ast_val) != nullptr);
-      std::cerr << "[UnaryExp] UnaryOp=" << *(yyvsp[-1].str_val) << " UnaryExp ok\n";
+      //std::cerr << "[UnaryExp] UnaryOp=" << *$1 << " UnaryExp ok\n";
       auto ast = new UnaryExpAST(); 
       ast->op = *(yyvsp[-1].str_val); 
       ast->exp = std::unique_ptr<BaseAST>((yyvsp[0].ast_val)); 
       (yyval.ast_val) = ast; 
     }
-#line 1502 "/root/compiler/build/sysy.tab.cpp"
+#line 1500 "/root/compiler/build/sysy.tab.cpp"
     break;
 
   case 13:
-#line 160 "/root/compiler/src/sysy.y"
-        { std::cerr << "[UnaryOp] +\n"; (yyval.str_val) = new std::string("+"); }
+#line 158 "/root/compiler/src/sysy.y"
+        { 
+    //std::cerr << "[UnaryOp] +\n"; 
+  (yyval.str_val) = new std::string("+"); }
 #line 1508 "/root/compiler/build/sysy.tab.cpp"
     break;
 
   case 14:
 #line 161 "/root/compiler/src/sysy.y"
-        { std::cerr << "[UnaryOp] -\n"; (yyval.str_val) = new std::string("-"); }
-#line 1514 "/root/compiler/build/sysy.tab.cpp"
+        { //std::cerr << "[UnaryOp] -\n"; 
+  (yyval.str_val) = new std::string("-"); }
+#line 1515 "/root/compiler/build/sysy.tab.cpp"
     break;
 
   case 15:
-#line 162 "/root/compiler/src/sysy.y"
-        { std::cerr << "[UnaryOp] !\n"; (yyval.str_val) = new std::string("!"); }
-#line 1520 "/root/compiler/build/sysy.tab.cpp"
+#line 163 "/root/compiler/src/sysy.y"
+        { //std::cerr << "[UnaryOp] !\n"; 
+  (yyval.str_val) = new std::string("!"); }
+#line 1522 "/root/compiler/build/sysy.tab.cpp"
     break;
 
   case 16:
-#line 166 "/root/compiler/src/sysy.y"
+#line 168 "/root/compiler/src/sysy.y"
              { 
       assert((yyvsp[0].ast_val) != nullptr);
-      std::cerr << "[MulExp] UnaryExp ok\n";
+      //std::cerr << "[MulExp] UnaryExp ok\n";
       (yyval.ast_val) = (yyvsp[0].ast_val); 
     }
-#line 1530 "/root/compiler/build/sysy.tab.cpp"
+#line 1532 "/root/compiler/build/sysy.tab.cpp"
     break;
 
   case 17:
-#line 171 "/root/compiler/src/sysy.y"
+#line 173 "/root/compiler/src/sysy.y"
                         { 
       assert((yyvsp[-2].ast_val) != nullptr);
       assert((yyvsp[0].ast_val) != nullptr);
-      std::cerr << "[MulExp] *\n";
+      //std::cerr << "[MulExp] *\n";
       auto ast = new BinaryExpAST(); 
       ast->op = "*"; 
       ast->lhs = std::unique_ptr<BaseAST>((yyvsp[-2].ast_val)); 
       ast->rhs = std::unique_ptr<BaseAST>((yyvsp[0].ast_val)); 
       (yyval.ast_val) = ast; 
     }
-#line 1545 "/root/compiler/build/sysy.tab.cpp"
+#line 1547 "/root/compiler/build/sysy.tab.cpp"
     break;
 
   case 18:
-#line 181 "/root/compiler/src/sysy.y"
+#line 183 "/root/compiler/src/sysy.y"
                         { 
       assert((yyvsp[-2].ast_val) != nullptr);
       assert((yyvsp[0].ast_val) != nullptr);
-      std::cerr << "[MulExp] /\n";
+      //std::cerr << "[MulExp] /\n";
       auto ast = new BinaryExpAST(); 
       ast->op = "/"; 
       ast->lhs = std::unique_ptr<BaseAST>((yyvsp[-2].ast_val)); 
       ast->rhs = std::unique_ptr<BaseAST>((yyvsp[0].ast_val)); 
       (yyval.ast_val) = ast; 
     }
-#line 1560 "/root/compiler/build/sysy.tab.cpp"
+#line 1562 "/root/compiler/build/sysy.tab.cpp"
     break;
 
   case 19:
-#line 191 "/root/compiler/src/sysy.y"
+#line 193 "/root/compiler/src/sysy.y"
                         { 
       assert((yyvsp[-2].ast_val) != nullptr);
       assert((yyvsp[0].ast_val) != nullptr);
-      std::cerr << "[MulExp] %\n";
+      //std::cerr << "[MulExp] %\n";
       auto ast = new BinaryExpAST(); 
       ast->op = "%"; 
       ast->lhs = std::unique_ptr<BaseAST>((yyvsp[-2].ast_val)); 
       ast->rhs = std::unique_ptr<BaseAST>((yyvsp[0].ast_val)); 
       (yyval.ast_val) = ast; 
     }
-#line 1575 "/root/compiler/build/sysy.tab.cpp"
+#line 1577 "/root/compiler/build/sysy.tab.cpp"
     break;
 
   case 20:
-#line 204 "/root/compiler/src/sysy.y"
+#line 206 "/root/compiler/src/sysy.y"
            { 
       assert((yyvsp[0].ast_val) != nullptr);
-      std::cerr << "[AddExp] MulExp ok\n";
+      //std::cerr << "[AddExp] MulExp ok\n";
       (yyval.ast_val) = (yyvsp[0].ast_val); 
     }
-#line 1585 "/root/compiler/build/sysy.tab.cpp"
+#line 1587 "/root/compiler/build/sysy.tab.cpp"
     break;
 
   case 21:
-#line 209 "/root/compiler/src/sysy.y"
+#line 211 "/root/compiler/src/sysy.y"
                       { 
       assert((yyvsp[-2].ast_val) != nullptr);
       assert((yyvsp[0].ast_val) != nullptr);
-      std::cerr << "[AddExp] +\n";
+      //std::cerr << "[AddExp] +\n";
       auto ast = new BinaryExpAST(); 
       ast->op = "+"; 
       ast->lhs = std::unique_ptr<BaseAST>((yyvsp[-2].ast_val)); 
       ast->rhs = std::unique_ptr<BaseAST>((yyvsp[0].ast_val)); 
       (yyval.ast_val) = ast; 
     }
-#line 1600 "/root/compiler/build/sysy.tab.cpp"
+#line 1602 "/root/compiler/build/sysy.tab.cpp"
     break;
 
   case 22:
-#line 219 "/root/compiler/src/sysy.y"
+#line 221 "/root/compiler/src/sysy.y"
                       { 
       assert((yyvsp[-2].ast_val) != nullptr);
       assert((yyvsp[0].ast_val) != nullptr);
-      std::cerr << "[AddExp] -\n";
+      //std::cerr << "[AddExp] -\n";
       auto ast = new BinaryExpAST(); 
       ast->op = "-"; 
       ast->lhs = std::unique_ptr<BaseAST>((yyvsp[-2].ast_val)); 
       ast->rhs = std::unique_ptr<BaseAST>((yyvsp[0].ast_val)); 
       (yyval.ast_val) = ast; 
     }
-#line 1615 "/root/compiler/build/sysy.tab.cpp"
+#line 1617 "/root/compiler/build/sysy.tab.cpp"
     break;
 
   case 23:
-#line 232 "/root/compiler/src/sysy.y"
+#line 234 "/root/compiler/src/sysy.y"
            { 
       assert((yyvsp[0].ast_val) != nullptr);
-      std::cerr << "[RelExp] AddExp ok\n";
+      //std::cerr << "[RelExp] AddExp ok\n";
       (yyval.ast_val) = (yyvsp[0].ast_val); 
     }
-#line 1625 "/root/compiler/build/sysy.tab.cpp"
+#line 1627 "/root/compiler/build/sysy.tab.cpp"
     break;
 
   case 24:
-#line 237 "/root/compiler/src/sysy.y"
+#line 239 "/root/compiler/src/sysy.y"
                       { 
       assert((yyvsp[-2].ast_val) != nullptr);
       assert((yyvsp[0].ast_val) != nullptr);
-      std::cerr << "[RelExp] <\n";
+      //std::cerr << "[RelExp] <\n";
       auto ast = new BinaryExpAST(); 
       ast->op = "<"; 
       ast->lhs = std::unique_ptr<BaseAST>((yyvsp[-2].ast_val)); 
       ast->rhs = std::unique_ptr<BaseAST>((yyvsp[0].ast_val)); 
       (yyval.ast_val) = ast; 
     }
-#line 1640 "/root/compiler/build/sysy.tab.cpp"
+#line 1642 "/root/compiler/build/sysy.tab.cpp"
     break;
 
   case 25:
-#line 247 "/root/compiler/src/sysy.y"
+#line 249 "/root/compiler/src/sysy.y"
                       { 
       assert((yyvsp[-2].ast_val) != nullptr);
       assert((yyvsp[0].ast_val) != nullptr);
-      std::cerr << "[RelExp] >\n";
+      //std::cerr << "[RelExp] >\n";
       auto ast = new BinaryExpAST(); 
       ast->op = ">"; 
       ast->lhs = std::unique_ptr<BaseAST>((yyvsp[-2].ast_val)); 
       ast->rhs = std::unique_ptr<BaseAST>((yyvsp[0].ast_val)); 
       (yyval.ast_val) = ast; 
     }
-#line 1655 "/root/compiler/build/sysy.tab.cpp"
+#line 1657 "/root/compiler/build/sysy.tab.cpp"
     break;
 
   case 26:
-#line 257 "/root/compiler/src/sysy.y"
+#line 259 "/root/compiler/src/sysy.y"
                      { 
       assert((yyvsp[-2].ast_val) != nullptr);
       assert((yyvsp[0].ast_val) != nullptr);
-      std::cerr << "[RelExp] <=\n";
+      //std::cerr << "[RelExp] <=\n";
       auto ast = new BinaryExpAST(); 
       ast->op = "<="; 
       ast->lhs = std::unique_ptr<BaseAST>((yyvsp[-2].ast_val)); 
       ast->rhs = std::unique_ptr<BaseAST>((yyvsp[0].ast_val)); 
       (yyval.ast_val) = ast; 
     }
-#line 1670 "/root/compiler/build/sysy.tab.cpp"
+#line 1672 "/root/compiler/build/sysy.tab.cpp"
     break;
 
   case 27:
-#line 267 "/root/compiler/src/sysy.y"
+#line 269 "/root/compiler/src/sysy.y"
                      { 
       assert((yyvsp[-2].ast_val) != nullptr);
       assert((yyvsp[0].ast_val) != nullptr);
-      std::cerr << "[RelExp] >=\n";
+      //std::cerr << "[RelExp] >=\n";
       auto ast = new BinaryExpAST(); 
       ast->op = ">="; 
       ast->lhs = std::unique_ptr<BaseAST>((yyvsp[-2].ast_val)); 
       ast->rhs = std::unique_ptr<BaseAST>((yyvsp[0].ast_val)); 
       (yyval.ast_val) = ast; 
     }
-#line 1685 "/root/compiler/build/sysy.tab.cpp"
+#line 1687 "/root/compiler/build/sysy.tab.cpp"
     break;
 
   case 28:
-#line 280 "/root/compiler/src/sysy.y"
+#line 282 "/root/compiler/src/sysy.y"
            { 
       assert((yyvsp[0].ast_val) != nullptr);
-      std::cerr << "[EqExp] RelExp ok\n";
+      //std::cerr << "[EqExp] RelExp ok\n";
       (yyval.ast_val) = (yyvsp[0].ast_val); 
     }
-#line 1695 "/root/compiler/build/sysy.tab.cpp"
+#line 1697 "/root/compiler/build/sysy.tab.cpp"
     break;
 
   case 29:
-#line 285 "/root/compiler/src/sysy.y"
+#line 287 "/root/compiler/src/sysy.y"
                     { 
       assert((yyvsp[-2].ast_val) != nullptr);
       assert((yyvsp[0].ast_val) != nullptr);
-      std::cerr << "[EqExp] ==\n";
+      //std::cerr << "[EqExp] ==\n";
       auto ast = new BinaryExpAST(); 
       ast->op = "=="; 
       ast->lhs = std::unique_ptr<BaseAST>((yyvsp[-2].ast_val)); 
       ast->rhs = std::unique_ptr<BaseAST>((yyvsp[0].ast_val)); 
       (yyval.ast_val) = ast; 
     }
-#line 1710 "/root/compiler/build/sysy.tab.cpp"
+#line 1712 "/root/compiler/build/sysy.tab.cpp"
     break;
 
   case 30:
-#line 295 "/root/compiler/src/sysy.y"
+#line 297 "/root/compiler/src/sysy.y"
                     { 
       assert((yyvsp[-2].ast_val) != nullptr);
       assert((yyvsp[0].ast_val) != nullptr);
-      std::cerr << "[EqExp] !=\n";
+      //std::cerr << "[EqExp] !=\n";
       auto ast = new BinaryExpAST(); 
       ast->op = "!="; 
       ast->lhs = std::unique_ptr<BaseAST>((yyvsp[-2].ast_val)); 
       ast->rhs = std::unique_ptr<BaseAST>((yyvsp[0].ast_val)); 
       (yyval.ast_val) = ast; 
     }
-#line 1725 "/root/compiler/build/sysy.tab.cpp"
+#line 1727 "/root/compiler/build/sysy.tab.cpp"
     break;
 
   case 31:
-#line 308 "/root/compiler/src/sysy.y"
+#line 310 "/root/compiler/src/sysy.y"
           { 
       assert((yyvsp[0].ast_val) != nullptr);
-      std::cerr << "[LAndExp] EqExp ok\n";
+      //std::cerr << "[LAndExp] EqExp ok\n";
       (yyval.ast_val) = (yyvsp[0].ast_val); 
     }
-#line 1735 "/root/compiler/build/sysy.tab.cpp"
+#line 1737 "/root/compiler/build/sysy.tab.cpp"
     break;
 
   case 32:
-#line 313 "/root/compiler/src/sysy.y"
+#line 315 "/root/compiler/src/sysy.y"
                       { 
       assert((yyvsp[-2].ast_val) != nullptr);
       assert((yyvsp[0].ast_val) != nullptr);
-      std::cerr << "[LAndExp] &&\n";
+      //std::cerr << "[LAndExp] &&\n";
       auto ast = new BinaryExpAST(); 
       ast->op = "&&"; 
       ast->lhs = std::unique_ptr<BaseAST>((yyvsp[-2].ast_val)); 
       ast->rhs = std::unique_ptr<BaseAST>((yyvsp[0].ast_val)); 
       (yyval.ast_val) = ast; 
     }
-#line 1750 "/root/compiler/build/sysy.tab.cpp"
+#line 1752 "/root/compiler/build/sysy.tab.cpp"
     break;
 
   case 33:
-#line 326 "/root/compiler/src/sysy.y"
+#line 328 "/root/compiler/src/sysy.y"
             { 
       assert((yyvsp[0].ast_val) != nullptr);
-      std::cerr << "[LOrExp] LAndExp ok\n";
       (yyval.ast_val) = (yyvsp[0].ast_val); 
     }
-#line 1760 "/root/compiler/build/sysy.tab.cpp"
+#line 1761 "/root/compiler/build/sysy.tab.cpp"
     break;
 
   case 34:
-#line 331 "/root/compiler/src/sysy.y"
+#line 332 "/root/compiler/src/sysy.y"
                       { 
       assert((yyvsp[-2].ast_val) != nullptr);
       assert((yyvsp[0].ast_val) != nullptr);
-      std::cerr << "[LOrExp] ||\n";
       auto ast = new BinaryExpAST(); 
       ast->op = "||"; 
       ast->lhs = std::unique_ptr<BaseAST>((yyvsp[-2].ast_val)); 
