@@ -44,13 +44,13 @@
 extern int yydebug;
 #endif
 /* "%code requires" blocks.  */
-#line 1 "/root/compiler/src/sysy.y"
+#line 2 "/root/compiler/src/sysy.y"
 
-  #include <memory>
-  #include <string>
-  #include <cassert>
-  #include "AST.hpp"
-  #include "sysy.tab.hpp"
+    #include <memory>
+    #include <string>
+    #include <cassert>
+    #include "AST.hpp"
+    #include "sysy.tab.hpp"
 
 #line 56 "/root/compiler/build/sysy.tab.hpp"
 
@@ -61,14 +61,15 @@ extern int yydebug;
   {
     INT = 258,
     RETURN = 259,
-    IDENT = 260,
-    INT_CONST = 261,
-    LE = 262,
-    GE = 263,
-    EQ = 264,
-    NE = 265,
-    AND = 266,
-    OR = 267
+    CONST = 260,
+    IDENT = 261,
+    INT_CONST = 262,
+    LE = 263,
+    GE = 264,
+    EQ = 265,
+    NE = 266,
+    AND = 267,
+    OR = 268
   };
 #endif
 
@@ -76,13 +77,18 @@ extern int yydebug;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 29 "/root/compiler/src/sysy.y"
+#line 24 "/root/compiler/src/sysy.y"
 
-  std::string *str_val;
-  int int_val;
-  BaseAST *ast_val;
+    std::string *str_val;
+    int int_val;
+    BaseAST *ast_val;
+    std::vector<BaseAST*> *vec_blockitem;
+    std::vector<ConstDeclAST::Def> *vec_constdef;
+    std::vector<VarDeclAST::Def> *vec_vardef;
+    ConstDeclAST::Def *constdef_ptr;
+    VarDeclAST::Def *vardef_ptr;
 
-#line 86 "/root/compiler/build/sysy.tab.hpp"
+#line 92 "/root/compiler/build/sysy.tab.hpp"
 
 };
 typedef union YYSTYPE YYSTYPE;

@@ -1,321 +1,286 @@
-%code requires {
-  #include <memory>
-  #include <string>
-  #include <cassert>
-  #include "AST.hpp"
-  #include "sysy.tab.hpp"
+%code requires
+{
+    #include <memory>
+    #include <string>
+    #include <cassert>
+    #include "AST.hpp"
+    #include "sysy.tab.hpp"
 }
 
 %{
-
-#include <cassert>
-#include <iostream>
-#include <memory>
-#include "AST.hpp"
-#include <string>
-
-// 声明 lexer 函数和错误处理函数
-int yylex();
-void yyerror(std::unique_ptr<BaseAST> &ast, const char *s);
-
-using namespace std;
-
+    #include <cassert>
+    #include <iostream>
+    #include <memory>
+    #include "AST.hpp"
+    #include <string>
+    int yylex();
+    void yyerror(std::unique_ptr<BaseAST> &ast, const char *s);
+    extern int yylineno;
+    using namespace std;
 %}
 
-// 定义 parser 函数和错误处理函数的附加参数
 %parse-param { std::unique_ptr<BaseAST> &ast }
-
-// yylval 的定义
-%union {
-  std::string *str_val;
-  int int_val;
-  BaseAST *ast_val;
+%union
+{
+    std::string *str_val;
+    int int_val;
+    BaseAST *ast_val;
+    std::vector<BaseAST*> *vec_blockitem;
+    std::vector<ConstDeclAST::Def> *vec_constdef;
+    std::vector<VarDeclAST::Def> *vec_vardef;
+    ConstDeclAST::Def *constdef_ptr;
+    VarDeclAST::Def *vardef_ptr;
 }
 
-// token 声明，补充所有双字符运算符
-%token INT RETURN
+%token INT RETURN CONST
 %token <str_val> IDENT
 %token <int_val> INT_CONST
 %token LE GE EQ NE AND OR
 
-// 非终结符的类型定义
-%type <ast_val> FuncDef FuncType Block Stmt Number Exp PrimaryExp UnaryExp MulExp AddExp RelExp EqExp LAndExp LOrExp
-%type <str_val> UnaryOp
+%type <ast_val> FuncDef FuncType Block BlockItem Stmt Decl ConstDecl VarDecl ConstInitVal InitVal Exp PrimaryExp Number UnaryExp MulExp AddExp RelExp EqExp LAndExp LOrExp ConstExp
+%type <str_val> UnaryOp LVal
+%type <vec_blockitem> BlockItemList
+%type <vec_constdef> ConstDefList
+%type <vec_vardef> VarDefList
+%type <constdef_ptr> ConstDef
+%type <vardef_ptr> VarDef
+
 %%
 
-// 开始符, CompUnit ::= FuncDef, 大括号后声明了解析完成后 parser 要做的事情
-// 之前我们定义了 FuncDef 会返回一个 str_val, 也就是字符串指针
-// 而 parser 一旦解析完 CompUnit, 就说明所有的 token 都被解析了, 即解析结束了
-// 此时我们应该把 FuncDef 返回的结果收集起来, 作为 AST 传给调用 parser 的函数
-// $1 指代规则里第一个符号的返回值, 也就是 FuncDef 的返回值
 CompUnit
-  : FuncDef {
-    assert($1 != nullptr);
-    auto comp_unit = make_unique<CompUnitAST>();
-    comp_unit->func_def = unique_ptr<BaseAST>($1);
-    ast = move(comp_unit);
-  }
-  ;
+    : FuncDef
+    {
+        assert($1 != nullptr);
+        auto comp_unit = make_unique<CompUnitAST>();
+        comp_unit->func_def = unique_ptr<BaseAST>($1);
+        ast = move(comp_unit);
+    }
+    ;
 
 FuncDef
-  : FuncType IDENT '(' ')' Block {
-    assert($1 != nullptr);
-    assert($2 != nullptr);
-    assert($5 != nullptr);
-    auto ast = new FuncDefAST();
-    ast->func_type = unique_ptr<BaseAST>($1);
-    ast->ident = *unique_ptr<string>($2);
-    ast->block = unique_ptr<BaseAST>($5);
-    $$ = ast;
-  }
-  ;
+    : FuncType IDENT '(' ')' Block
+    {
+        assert($1 != nullptr);
+        assert($2 != nullptr);
+        assert($5 != nullptr);
+        auto ast = new FuncDefAST();
+        ast->func_type = unique_ptr<BaseAST>($1);
+        ast->ident = *unique_ptr<string>($2);
+        ast->block = unique_ptr<BaseAST>($5);
+        $$ = ast;
+    }
+    ;
 
 FuncType
-  : INT {
-    //std::cerr << "[FuncType] INT ok\n";
-    auto ast = new FuncTypeAST();
-    ast->type = "int";
-    $$ = ast;
-  }
-  ;
+    : INT
+    {
+        auto ast = new FuncTypeAST();
+        ast->type = "int";
+        $$ = ast;
+    }
+    ;
 
 Block
-  : '{' Stmt '}' {
-    assert($2 != nullptr);
-    //std::cerr << "[Block] Stmt ok\n";
-    auto ast = new BlockAST();
-    ast->stmt = unique_ptr<BaseAST>($2);
-    $$ = ast;
-  }
-  ;
+    : '{' '}'
+    {
+        auto ast = new BlockAST();
+        $$ = ast;
+    }
+    | '{' BlockItemList '}'
+    {
+        auto ast = new BlockAST();
+        for (auto &item : *static_cast<std::vector<BaseAST*>*>($2))
+        {
+            ast->items.push_back(unique_ptr<BaseAST>(item));
+        }
+        delete static_cast<std::vector<BaseAST*>*>($2);
+        $$ = ast;
+    }
+    ;
+
+BlockItemList
+    : BlockItem
+    {
+        auto vec = new std::vector<BaseAST*>();
+        vec->push_back($1);
+        $$ = vec;
+    }
+    | BlockItemList BlockItem
+    {
+        auto vec = static_cast<std::vector<BaseAST*>*>($1);
+        vec->push_back($2);
+        $$ = vec;
+    }
+    ;
+
+BlockItem
+    : Decl
+    {
+        $$ = $1;
+    }
+    | Stmt
+    {
+        $$ = $1;
+    }
+    ;
+
+Decl
+    : ConstDecl
+    {
+        $$ = $1;
+    }
+    | VarDecl
+    {
+        $$ = $1;
+    }
+    ;
+
+ConstDecl
+    : CONST INT ConstDefList ';'
+    {
+        auto ast = new ConstDeclAST();
+        for (auto &def : *static_cast<std::vector<ConstDeclAST::Def>*>($3))
+        {
+            ast->defs.push_back(std::move(def));
+        }
+        delete static_cast<std::vector<ConstDeclAST::Def>*>($3);
+        $$ = ast;
+    }
+    ;
+
+ConstDefList
+    : ConstDef
+    {
+        auto vec = new std::vector<ConstDeclAST::Def>();
+        vec->push_back(std::move(*$1)); // Use move to avoid copying
+        delete $1;
+        $$ = vec;
+    }
+    | ConstDefList ',' ConstDef
+    {
+        auto vec = $1;
+        vec->push_back(std::move(*$3)); // Use move to avoid copying
+        delete $3;
+        $$ = vec;
+    }
+    ;
+
+ConstDef
+    : IDENT '=' ConstInitVal
+    {
+        auto def = new ConstDeclAST::Def();
+        def->name = *unique_ptr<string>($1);
+        def->val = unique_ptr<BaseAST>($3);
+        $$ = def;
+    }
+    ;
+
+ConstInitVal
+    : ConstExp
+    {
+        $$ = $1;
+    }
+    ;
+
+ConstExp
+    : Exp
+    {
+        $$ = $1;
+    }
+    ;
+
+VarDecl
+    : INT VarDefList ';'
+    {
+        auto ast = new VarDeclAST();
+        for (auto &def : *static_cast<std::vector<VarDeclAST::Def>*>($2))
+        {
+            ast->defs.push_back(std::move(def));
+        }
+        delete static_cast<std::vector<VarDeclAST::Def>*>($2);
+        $$ = ast;
+    }
+    ;
+
+VarDefList
+    : VarDef
+    {
+        auto vec = new std::vector<VarDeclAST::Def>();
+        vec->push_back(std::move(*$1));
+        delete $1;
+        $$ = vec;
+    }
+    | VarDefList ',' VarDef
+    {
+        auto vec = $1;
+        vec->push_back(std::move(*$3));
+        delete $3;
+        $$ = vec;
+    }
+    ;
+
+VarDef
+    : IDENT
+    {
+        auto def = new VarDeclAST::Def();
+        def->name = *unique_ptr<string>($1);
+        def->has_init = false;
+        $$ = def;
+    }
+    | IDENT '=' InitVal
+    {
+        auto def = new VarDeclAST::Def();
+        def->name = *unique_ptr<string>($1);
+        def->val = unique_ptr<BaseAST>($3);
+        def->has_init = true;
+        $$ = def;
+    }
+    ;
+
+InitVal
+    : Exp
+    {
+        $$ = $1;
+    }
+    ;
 
 Stmt
-  : RETURN Exp ';' {
-    assert($2 != nullptr);
-    //std::cerr << "[Stmt] Exp ok\n";
-    auto ast = new StmtAST();
-    ast->stmt = unique_ptr<BaseAST>($2);
-    $$ = ast;
-  }
-  ;
+    : LVal '=' Exp ';'
+    {
+        auto ast = new AssignAST();
+        ast->lval = *unique_ptr<string>($1);
+        ast->exp = unique_ptr<BaseAST>($3);
+        $$ = ast;
+    }
+    | RETURN Exp ';'
+    {
+        auto ast = new ReturnAST();
+        ast->exp = unique_ptr<BaseAST>($2);
+        $$ = ast;
+    }
+    ;
+
+LVal
+    : IDENT
+    {
+        $$ = $1;
+    }
+    ;
 
 Exp
-  : LOrExp { 
-    assert($1 != nullptr);
-    //std::cerr << "[Exp] LOrExp ok\n";
-    auto ast = new ExpAST(); 
-    ast->lor_exp = std::unique_ptr<BaseAST>($1); 
-    $$ = ast;
-  }
-  ;
-
-PrimaryExp
-  : '(' Exp ')' { 
-      assert($2 != nullptr);
-      //std::cerr << "[PrimaryExp] (Exp) ok\n";
-      auto ast = new PrimaryExpAST(); 
-      ast->is_number = false; 
-      ast->exp = std::unique_ptr<BaseAST>($2); 
-      $$ = ast; 
+    : LOrExp
+    {
+        auto ast = new ExpAST(); 
+        ast->lor_exp = std::unique_ptr<BaseAST>($1); 
+        $$ = ast;
     }
-  | Number { 
-      assert($1 != nullptr);
-      //std::cerr << "[PrimaryExp] Number ok\n";
-      auto ast = new PrimaryExpAST(); 
-      ast->is_number = true; 
-      ast->number_value = dynamic_cast<NumberAST*>($1)->value; 
-      $$ = ast; 
-    }
-  ;
-
-Number
-  : INT_CONST { 
-      //std::cerr << "[Number] INT_CONST=" << $1 << "\n";
-      auto ast = new NumberAST(); 
-      ast->value = $1; 
-      $$ = ast; 
-    }
-  ;
-
-UnaryExp
-  : PrimaryExp { 
-      assert($1 != nullptr);
-      //std::cerr << "[UnaryExp] PrimaryExp ok\n";
-      $$ = $1; 
-    }
-  | UnaryOp UnaryExp { 
-      assert($1 != nullptr);
-      assert($2 != nullptr);
-      //std::cerr << "[UnaryExp] UnaryOp=" << *$1 << " UnaryExp ok\n";
-      auto ast = new UnaryExpAST(); 
-      ast->op = *$1; 
-      ast->exp = std::unique_ptr<BaseAST>($2); 
-      $$ = ast; 
-    }
-  ;
-
-UnaryOp
-  : '+' { 
-    //std::cerr << "[UnaryOp] +\n"; 
-  $$ = new std::string("+"); }
-  | '-' { //std::cerr << "[UnaryOp] -\n"; 
-  $$ = new std::string("-"); }
-  | '!' { //std::cerr << "[UnaryOp] !\n"; 
-  $$ = new std::string("!"); }
-  ;
-
-MulExp
-  : UnaryExp { 
-      assert($1 != nullptr);
-      //std::cerr << "[MulExp] UnaryExp ok\n";
-      $$ = $1; 
-    }
-  | MulExp '*' UnaryExp { 
-      assert($1 != nullptr);
-      assert($3 != nullptr);
-      //std::cerr << "[MulExp] *\n";
-      auto ast = new BinaryExpAST(); 
-      ast->op = "*"; 
-      ast->lhs = std::unique_ptr<BaseAST>($1); 
-      ast->rhs = std::unique_ptr<BaseAST>($3); 
-      $$ = ast; 
-    }
-  | MulExp '/' UnaryExp { 
-      assert($1 != nullptr);
-      assert($3 != nullptr);
-      //std::cerr << "[MulExp] /\n";
-      auto ast = new BinaryExpAST(); 
-      ast->op = "/"; 
-      ast->lhs = std::unique_ptr<BaseAST>($1); 
-      ast->rhs = std::unique_ptr<BaseAST>($3); 
-      $$ = ast; 
-    }
-  | MulExp '%' UnaryExp { 
-      assert($1 != nullptr);
-      assert($3 != nullptr);
-      //std::cerr << "[MulExp] %\n";
-      auto ast = new BinaryExpAST(); 
-      ast->op = "%"; 
-      ast->lhs = std::unique_ptr<BaseAST>($1); 
-      ast->rhs = std::unique_ptr<BaseAST>($3); 
-      $$ = ast; 
-    }
-  ;
-
-AddExp
-  : MulExp { 
-      assert($1 != nullptr);
-      //std::cerr << "[AddExp] MulExp ok\n";
-      $$ = $1; 
-    }
-  | AddExp '+' MulExp { 
-      assert($1 != nullptr);
-      assert($3 != nullptr);
-      //std::cerr << "[AddExp] +\n";
-      auto ast = new BinaryExpAST(); 
-      ast->op = "+"; 
-      ast->lhs = std::unique_ptr<BaseAST>($1); 
-      ast->rhs = std::unique_ptr<BaseAST>($3); 
-      $$ = ast; 
-    }
-  | AddExp '-' MulExp { 
-      assert($1 != nullptr);
-      assert($3 != nullptr);
-      //std::cerr << "[AddExp] -\n";
-      auto ast = new BinaryExpAST(); 
-      ast->op = "-"; 
-      ast->lhs = std::unique_ptr<BaseAST>($1); 
-      ast->rhs = std::unique_ptr<BaseAST>($3); 
-      $$ = ast; 
-    }
-  ;
-
-RelExp
-  : AddExp { 
-      assert($1 != nullptr);
-      //std::cerr << "[RelExp] AddExp ok\n";
-      $$ = $1; 
-    }
-  | RelExp '<' AddExp { 
-      assert($1 != nullptr);
-      assert($3 != nullptr);
-      //std::cerr << "[RelExp] <\n";
-      auto ast = new BinaryExpAST(); 
-      ast->op = "<"; 
-      ast->lhs = std::unique_ptr<BaseAST>($1); 
-      ast->rhs = std::unique_ptr<BaseAST>($3); 
-      $$ = ast; 
-    }
-  | RelExp '>' AddExp { 
-      assert($1 != nullptr);
-      assert($3 != nullptr);
-      //std::cerr << "[RelExp] >\n";
-      auto ast = new BinaryExpAST(); 
-      ast->op = ">"; 
-      ast->lhs = std::unique_ptr<BaseAST>($1); 
-      ast->rhs = std::unique_ptr<BaseAST>($3); 
-      $$ = ast; 
-    }
-  | RelExp LE AddExp { 
-      assert($1 != nullptr);
-      assert($3 != nullptr);
-      //std::cerr << "[RelExp] <=\n";
-      auto ast = new BinaryExpAST(); 
-      ast->op = "<="; 
-      ast->lhs = std::unique_ptr<BaseAST>($1); 
-      ast->rhs = std::unique_ptr<BaseAST>($3); 
-      $$ = ast; 
-    }
-  | RelExp GE AddExp { 
-      assert($1 != nullptr);
-      assert($3 != nullptr);
-      //std::cerr << "[RelExp] >=\n";
-      auto ast = new BinaryExpAST(); 
-      ast->op = ">="; 
-      ast->lhs = std::unique_ptr<BaseAST>($1); 
-      ast->rhs = std::unique_ptr<BaseAST>($3); 
-      $$ = ast; 
-    }
-  ;
-
-EqExp
-  : RelExp { 
-      assert($1 != nullptr);
-      //std::cerr << "[EqExp] RelExp ok\n";
-      $$ = $1; 
-    }
-  | EqExp EQ RelExp { 
-      assert($1 != nullptr);
-      assert($3 != nullptr);
-      //std::cerr << "[EqExp] ==\n";
-      auto ast = new BinaryExpAST(); 
-      ast->op = "=="; 
-      ast->lhs = std::unique_ptr<BaseAST>($1); 
-      ast->rhs = std::unique_ptr<BaseAST>($3); 
-      $$ = ast; 
-    }
-  | EqExp NE RelExp { 
-      assert($1 != nullptr);
-      assert($3 != nullptr);
-      //std::cerr << "[EqExp] !=\n";
-      auto ast = new BinaryExpAST(); 
-      ast->op = "!="; 
-      ast->lhs = std::unique_ptr<BaseAST>($1); 
-      ast->rhs = std::unique_ptr<BaseAST>($3); 
-      $$ = ast; 
-    }
-  ;
+    ;
 
 LAndExp
   : EqExp { 
-      assert($1 != nullptr);
-      //std::cerr << "[LAndExp] EqExp ok\n";
       $$ = $1; 
     }
   | LAndExp AND EqExp { 
-      assert($1 != nullptr);
-      assert($3 != nullptr);
-      //std::cerr << "[LAndExp] &&\n";
       auto ast = new BinaryExpAST(); 
       ast->op = "&&"; 
       ast->lhs = std::unique_ptr<BaseAST>($1); 
@@ -326,12 +291,9 @@ LAndExp
 
 LOrExp
   : LAndExp { 
-      assert($1 != nullptr);
       $$ = $1; 
     }
   | LOrExp OR LAndExp { 
-      assert($1 != nullptr);
-      assert($3 != nullptr);
       auto ast = new BinaryExpAST(); 
       ast->op = "||"; 
       ast->lhs = std::unique_ptr<BaseAST>($1); 
@@ -340,8 +302,176 @@ LOrExp
     }
   ;
 
+EqExp
+  : RelExp { 
+      $$ = $1; 
+    }
+  | EqExp EQ RelExp { 
+      auto ast = new BinaryExpAST(); 
+      ast->op = "=="; 
+      ast->lhs = std::unique_ptr<BaseAST>($1); 
+      ast->rhs = std::unique_ptr<BaseAST>($3); 
+      $$ = ast; 
+    }
+  | EqExp NE RelExp { 
+      auto ast = new BinaryExpAST(); 
+      ast->op = "!="; 
+      ast->lhs = std::unique_ptr<BaseAST>($1); 
+      ast->rhs = std::unique_ptr<BaseAST>($3); 
+      $$ = ast; 
+    }
+  ;
+
+RelExp
+  : AddExp { 
+      $$ = $1; 
+    }
+  | RelExp '<' AddExp { 
+      auto ast = new BinaryExpAST(); 
+      ast->op = "<"; 
+      ast->lhs = std::unique_ptr<BaseAST>($1); 
+      ast->rhs = std::unique_ptr<BaseAST>($3); 
+      $$ = ast; 
+    }
+  | RelExp '>' AddExp { 
+      auto ast = new BinaryExpAST(); 
+      ast->op = ">"; 
+      ast->lhs = std::unique_ptr<BaseAST>($1); 
+      ast->rhs = std::unique_ptr<BaseAST>($3); 
+      $$ = ast; 
+    }
+  | RelExp LE AddExp { 
+      auto ast = new BinaryExpAST(); 
+      ast->op = "<="; 
+      ast->lhs = std::unique_ptr<BaseAST>($1); 
+      ast->rhs = std::unique_ptr<BaseAST>($3); 
+      $$ = ast; 
+    }
+  | RelExp GE AddExp { 
+      auto ast = new BinaryExpAST(); 
+      ast->op = ">="; 
+      ast->lhs = std::unique_ptr<BaseAST>($1); 
+      ast->rhs = std::unique_ptr<BaseAST>($3); 
+      $$ = ast; 
+    }
+  ;
+
+AddExp
+    : MulExp
+    {
+        $$ = $1;
+    }
+    | AddExp '+' MulExp
+    {
+        auto ast = new BinaryExpAST();
+        ast->op = "+";
+        ast->lhs = std::unique_ptr<BaseAST>($1);
+        ast->rhs = std::unique_ptr<BaseAST>($3);
+        $$ = ast;
+    }
+    | AddExp '-' MulExp
+    {
+        auto ast = new BinaryExpAST();
+        ast->op = "-";
+        ast->lhs = std::unique_ptr<BaseAST>($1);
+        ast->rhs = std::unique_ptr<BaseAST>($3);
+        $$ = ast;
+    }
+    ;
+
+MulExp
+    : UnaryExp
+    {
+        $$ = $1;
+    }
+    | MulExp '*' UnaryExp
+    {
+        auto ast = new BinaryExpAST();
+        ast->op = "*";
+        ast->lhs = std::unique_ptr<BaseAST>($1);
+        ast->rhs = std::unique_ptr<BaseAST>($3);
+        $$ = ast;
+    }
+    | MulExp '/' UnaryExp
+    {
+        auto ast = new BinaryExpAST();
+        ast->op = "/";
+        ast->lhs = std::unique_ptr<BaseAST>($1);
+        ast->rhs = std::unique_ptr<BaseAST>($3);
+        $$ = ast;
+    }
+    | MulExp '%' UnaryExp
+    {
+        auto ast = new BinaryExpAST();
+        ast->op = "%";
+        ast->lhs = std::unique_ptr<BaseAST>($1);
+        ast->rhs = std::unique_ptr<BaseAST>($3);
+        $$ = ast;
+    }
+    ;
+
+UnaryExp
+  : PrimaryExp { 
+      $$ = $1; 
+    }
+  | UnaryOp UnaryExp { 
+      auto ast = new UnaryExpAST(); 
+      ast->op = *$1; 
+      ast->exp = std::unique_ptr<BaseAST>($2); 
+      $$ = ast; 
+    }
+  ;
+
+UnaryOp
+    : '+'
+    {
+        $$ = new std::string("+");
+    }
+    | '-'
+    {
+        $$ = new std::string("-");
+    }
+    | '!'
+    {
+        $$ = new std::string("!");
+    }
+    ;
+
+PrimaryExp
+    : '(' Exp ')'
+    {
+        auto ast = new PrimaryExpAST(); 
+        ast->is_number = false; 
+        ast->exp = std::unique_ptr<BaseAST>($2); 
+        $$ = ast; 
+    }
+    | LVal
+    {
+        auto ast = new IdentAST();
+        ast->name = *unique_ptr<string>($1);
+        $$ = ast;
+    }
+    | Number
+    {
+        auto ast = new PrimaryExpAST();
+        ast->is_number = true; 
+        ast->number_value = dynamic_cast<NumberAST*>($1)->value; 
+        $$ = ast; 
+    }
+    ;
+
+Number
+    : INT_CONST
+    {
+        auto ast = new NumberAST();
+        ast->value = $1;
+        $$ = ast;
+    }
+    ;
+
 %%
 
-void yyerror(unique_ptr<BaseAST> &ast, const char *s) {
-  cerr << "error: " << s << endl;
+void yyerror(std::unique_ptr<BaseAST> &ast, const char *s)
+{
+    std::cerr << "error: " << s << " at line " << yylineno << std::endl;
 }
