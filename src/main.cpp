@@ -35,7 +35,7 @@ int main(int argc, const char *argv[])
     std::cout << "Semantic check passed.\n";
     if(mode[1] == 'k')
     {
-        ast->Dump();
+        //ast->Dump(std::cout);
         std::vector<std::string> code;
         std::string koopa_ir = ast->EmitKoopa(code, root_tab);
         std::ofstream ofs(output, std::ios::out | std::ios::trunc);

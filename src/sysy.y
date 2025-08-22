@@ -36,8 +36,11 @@
 %token <str_val> IDENT
 %token <int_val> INT_CONST
 %token LE GE EQ NE AND OR
+%token IF ELSE
 
 %type <ast_val> FuncDef FuncType Block BlockItem Stmt Decl ConstDecl VarDecl ConstInitVal InitVal Exp PrimaryExp Number UnaryExp MulExp AddExp RelExp EqExp LAndExp LOrExp ConstExp
+%type <ast_val> StmtNoIf
+%type <ast_val> IfStmtNoElse IfStmtWithElse
 %type <str_val> UnaryOp LVal
 %type <vec_blockitem> BlockItemList
 %type <vec_constdef> ConstDefList
@@ -152,14 +155,14 @@ ConstDefList
     : ConstDef
     {
         auto vec = new std::vector<ConstDeclAST::Def>();
-        vec->push_back(std::move(*$1)); // Use move to avoid copying
+        vec->push_back(std::move(*$1));
         delete $1;
         $$ = vec;
     }
     | ConstDefList ',' ConstDef
     {
         auto vec = $1;
-        vec->push_back(std::move(*$3)); // Use move to avoid copying
+        vec->push_back(std::move(*$3));
         delete $3;
         $$ = vec;
     }
@@ -244,7 +247,46 @@ InitVal
     }
     ;
 
+/* ==== 拆分法核心 ==== */
 Stmt
+    : IfStmtWithElse     /* 有 else 的 if */
+    | IfStmtNoElse       /* 无 else 的 if */
+    | StmtNoIf         /* 其它语句 */
+
+IfStmtNoElse
+    : IF '(' Exp ')' Stmt
+    {
+        auto ast = new IfStmtAST();
+        ast->cond = std::unique_ptr<BaseAST>($3);
+        ast->then_stmt = std::unique_ptr<BaseAST>($5);
+        ast->has_else = false;
+        $$ = ast;
+    }
+    ;
+
+IfStmtWithElse
+    : IF '(' Exp ')' IfStmtWithElse ELSE Stmt
+    {
+        auto ast = new IfStmtAST();
+        ast->cond = std::unique_ptr<BaseAST>($3);
+        ast->then_stmt = std::unique_ptr<BaseAST>($5);
+        ast->else_stmt = std::unique_ptr<BaseAST>($7);
+        ast->has_else = true;
+        $$ = ast;
+    }
+    | IF '(' Exp ')' StmtNoIf ELSE Stmt
+    {
+        auto ast = new IfStmtAST();
+        ast->cond = std::unique_ptr<BaseAST>($3);
+        ast->then_stmt = std::unique_ptr<BaseAST>($5);
+        ast->else_stmt = std::unique_ptr<BaseAST>($7);
+        ast->has_else = true;
+        $$ = ast;
+    }
+    ;
+
+/* StmtNoIf 不能包含 if 语句 */
+StmtNoIf
     : LVal '=' Exp ';'
     {
         auto ast = new StmtAST();
@@ -302,89 +344,89 @@ LVal
 Exp
     : LOrExp
     {
-        auto ast = new ExpAST(); 
-        ast->lor_exp = std::unique_ptr<BaseAST>($1); 
+        auto ast = new ExpAST();
+        ast->lor_exp = std::unique_ptr<BaseAST>($1);
         $$ = ast;
     }
     ;
 
 LAndExp
-  : EqExp { 
-      $$ = $1; 
+  : EqExp {
+      $$ = $1;
     }
-  | LAndExp AND EqExp { 
-      auto ast = new BinaryExpAST(); 
-      ast->op = "&&"; 
-      ast->lhs = std::unique_ptr<BaseAST>($1); 
-      ast->rhs = std::unique_ptr<BaseAST>($3); 
-      $$ = ast; 
+  | LAndExp AND EqExp {
+      auto ast = new BinaryExpAST();
+      ast->op = "&&";
+      ast->lhs = std::unique_ptr<BaseAST>($1);
+      ast->rhs = std::unique_ptr<BaseAST>($3);
+      $$ = ast;
     }
   ;
 
 LOrExp
-  : LAndExp { 
-      $$ = $1; 
+  : LAndExp {
+      $$ = $1;
     }
-  | LOrExp OR LAndExp { 
-      auto ast = new BinaryExpAST(); 
-      ast->op = "||"; 
-      ast->lhs = std::unique_ptr<BaseAST>($1); 
-      ast->rhs = std::unique_ptr<BaseAST>($3); 
-      $$ = ast; 
+  | LOrExp OR LAndExp {
+      auto ast = new BinaryExpAST();
+      ast->op = "||";
+      ast->lhs = std::unique_ptr<BaseAST>($1);
+      ast->rhs = std::unique_ptr<BaseAST>($3);
+      $$ = ast;
     }
   ;
 
 EqExp
-  : RelExp { 
-      $$ = $1; 
+  : RelExp {
+      $$ = $1;
     }
-  | EqExp EQ RelExp { 
-      auto ast = new BinaryExpAST(); 
-      ast->op = "=="; 
-      ast->lhs = std::unique_ptr<BaseAST>($1); 
-      ast->rhs = std::unique_ptr<BaseAST>($3); 
-      $$ = ast; 
+  | EqExp EQ RelExp {
+      auto ast = new BinaryExpAST();
+      ast->op = "==";
+      ast->lhs = std::unique_ptr<BaseAST>($1);
+      ast->rhs = std::unique_ptr<BaseAST>($3);
+      $$ = ast;
     }
-  | EqExp NE RelExp { 
-      auto ast = new BinaryExpAST(); 
-      ast->op = "!="; 
-      ast->lhs = std::unique_ptr<BaseAST>($1); 
-      ast->rhs = std::unique_ptr<BaseAST>($3); 
-      $$ = ast; 
+  | EqExp NE RelExp {
+      auto ast = new BinaryExpAST();
+      ast->op = "!=";
+      ast->lhs = std::unique_ptr<BaseAST>($1);
+      ast->rhs = std::unique_ptr<BaseAST>($3);
+      $$ = ast;
     }
   ;
 
 RelExp
-  : AddExp { 
-      $$ = $1; 
+  : AddExp {
+      $$ = $1;
     }
-  | RelExp '<' AddExp { 
-      auto ast = new BinaryExpAST(); 
-      ast->op = "<"; 
-      ast->lhs = std::unique_ptr<BaseAST>($1); 
-      ast->rhs = std::unique_ptr<BaseAST>($3); 
-      $$ = ast; 
+  | RelExp '<' AddExp {
+      auto ast = new BinaryExpAST();
+      ast->op = "<";
+      ast->lhs = std::unique_ptr<BaseAST>($1);
+      ast->rhs = std::unique_ptr<BaseAST>($3);
+      $$ = ast;
     }
-  | RelExp '>' AddExp { 
-      auto ast = new BinaryExpAST(); 
-      ast->op = ">"; 
-      ast->lhs = std::unique_ptr<BaseAST>($1); 
-      ast->rhs = std::unique_ptr<BaseAST>($3); 
-      $$ = ast; 
+  | RelExp '>' AddExp {
+      auto ast = new BinaryExpAST();
+      ast->op = ">";
+      ast->lhs = std::unique_ptr<BaseAST>($1);
+      ast->rhs = std::unique_ptr<BaseAST>($3);
+      $$ = ast;
     }
-  | RelExp LE AddExp { 
-      auto ast = new BinaryExpAST(); 
-      ast->op = "<="; 
-      ast->lhs = std::unique_ptr<BaseAST>($1); 
-      ast->rhs = std::unique_ptr<BaseAST>($3); 
-      $$ = ast; 
+  | RelExp LE AddExp {
+      auto ast = new BinaryExpAST();
+      ast->op = "<=";
+      ast->lhs = std::unique_ptr<BaseAST>($1);
+      ast->rhs = std::unique_ptr<BaseAST>($3);
+      $$ = ast;
     }
-  | RelExp GE AddExp { 
-      auto ast = new BinaryExpAST(); 
-      ast->op = ">="; 
-      ast->lhs = std::unique_ptr<BaseAST>($1); 
-      ast->rhs = std::unique_ptr<BaseAST>($3); 
-      $$ = ast; 
+  | RelExp GE AddExp {
+      auto ast = new BinaryExpAST();
+      ast->op = ">=";
+      ast->lhs = std::unique_ptr<BaseAST>($1);
+      ast->rhs = std::unique_ptr<BaseAST>($3);
+      $$ = ast;
     }
   ;
 
@@ -443,14 +485,14 @@ MulExp
     ;
 
 UnaryExp
-  : PrimaryExp { 
-      $$ = $1; 
+  : PrimaryExp {
+      $$ = $1;
     }
-  | UnaryOp UnaryExp { 
-      auto ast = new UnaryExpAST(); 
-      ast->op = *$1; 
-      ast->exp = std::unique_ptr<BaseAST>($2); 
-      $$ = ast; 
+  | UnaryOp UnaryExp {
+      auto ast = new UnaryExpAST();
+      ast->op = *$1;
+      ast->exp = std::unique_ptr<BaseAST>($2);
+      $$ = ast;
     }
   ;
 
@@ -472,10 +514,10 @@ UnaryOp
 PrimaryExp
     : '(' Exp ')'
     {
-        auto ast = new PrimaryExpAST(); 
-        ast->is_number = false; 
-        ast->exp = std::unique_ptr<BaseAST>($2); 
-        $$ = ast; 
+        auto ast = new PrimaryExpAST();
+        ast->is_number = false;
+        ast->exp = std::unique_ptr<BaseAST>($2);
+        $$ = ast;
     }
     | LVal
     {
@@ -486,9 +528,9 @@ PrimaryExp
     | Number
     {
         auto ast = new PrimaryExpAST();
-        ast->is_number = true; 
-        ast->number_value = dynamic_cast<NumberAST*>($1)->value; 
-        $$ = ast; 
+        ast->is_number = true;
+        ast->number_value = dynamic_cast<NumberAST*>($1)->value;
+        $$ = ast;
     }
     ;
 

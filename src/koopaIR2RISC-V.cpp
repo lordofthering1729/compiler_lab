@@ -8,7 +8,7 @@
 #include <vector>
 
 // RISC-V 临时寄存器列表
-static const char* regs[] = 
+static const char* regs[] =
 {
     "t0", "t1", "t2", "t3", "t4", "t5", "t6"
 };
@@ -30,22 +30,17 @@ int Align16(int size)
     return (size + 15) / 16 * 16;
 }
 
-// 扫描所有指令，分配偏移，返回对齐后的总字节数
 void AnalyzeStack(const koopa_raw_function_t &func, StackInfo &stack_info)
 {
     int offset = 0;
-    // 对所有 basic block 的指令分配空间
     for (size_t i = 0; i < func->bbs.len; ++i)
     {
         auto bb = reinterpret_cast<koopa_raw_basic_block_t>(func->bbs.buffer[i]);
         for (size_t j = 0; j < bb->insts.len; ++j)
         {
             auto inst = reinterpret_cast<koopa_raw_value_t>(bb->insts.buffer[j]);
-            // unit 类型不分配空间
             if (inst->ty->tag == KOOPA_RTT_UNIT)
                 continue;
-
-            // alloc 另做记录
             if (inst->kind.tag == KOOPA_RVT_ALLOC)
             {
                 stack_info.alloc_offset[inst] = offset;
@@ -66,7 +61,6 @@ void EmitPrologue(std::ofstream &riscv_out, int stack_size)
     int aligned = Align16(stack_size);
     if (aligned == 0)
         return;
-    // 范围在[-2048,2047]直接用 addi
     if (aligned >= -2048 && aligned <= 2047)
     {
         riscv_out << "  addi sp, sp, -" << aligned << "\n";
@@ -94,7 +88,6 @@ void EmitEpilogue(std::ofstream &riscv_out, int stack_size)
     }
 }
 
-// 获取一个指令的栈偏移
 int GetValueOffset(const StackInfo &stack_info, const koopa_raw_value_t value)
 {
     auto it = stack_info.value_offset.find(value);
@@ -103,11 +96,9 @@ int GetValueOffset(const StackInfo &stack_info, const koopa_raw_value_t value)
     auto it2 = stack_info.alloc_offset.find(value);
     if (it2 != stack_info.alloc_offset.end())
         return it2->second;
-    // 没找到，可能是参数（本题不涉及），或者直接返回0
     return 0;
 }
 
-// 记录每条指令已分配的寄存器名
 std::map<const koopa_raw_value_t, std::string> reg_map;
 int reg_cnt = 0;
 
@@ -119,6 +110,17 @@ void Visit(const koopa_raw_basic_block_t &bb, std::ofstream &riscv_out,
            StackInfo &stack_info);
 void Visit(const koopa_raw_value_t value, std::ofstream &riscv_out,
            StackInfo &stack_info);
+
+// ---------- 新增：输出块标签 ----------
+void EmitBlockLabel(const koopa_raw_basic_block_t &bb, std::ofstream &riscv_out)
+{
+    if (bb->name) {
+        std::string label(bb->name);
+        // 去掉开头的 %（Koopa IR），RISC-V 汇编 label 不能有 %
+        if (!label.empty() && label[0] == '%') label = label.substr(1);
+        riscv_out << label << ":\n";
+    }
+}
 
 void Visit(const koopa_raw_program_t &program, std::ofstream &riscv_out)
 {
@@ -167,13 +169,20 @@ void Visit(const koopa_raw_function_t &func, std::ofstream &riscv_out)
     riscv_out << "  .globl " << func_name << "\n";
     riscv_out << func_name << ":\n";
     EmitPrologue(riscv_out, stack_info.total_bytes);
-    Visit(func->bbs, riscv_out, stack_info);
+    // 输出所有基本块（带标签）
+    for (size_t i = 0; i < func->bbs.len; ++i)
+    {
+        auto bb = reinterpret_cast<koopa_raw_basic_block_t>(func->bbs.buffer[i]);
+        EmitBlockLabel(bb, riscv_out);
+        Visit(bb->insts, riscv_out, stack_info);
+    }
     EmitEpilogue(riscv_out, stack_info.total_bytes);
 }
 
 void Visit(const koopa_raw_basic_block_t &bb, std::ofstream &riscv_out,
            StackInfo &stack_info)
 {
+    EmitBlockLabel(bb, riscv_out);
     Visit(bb->insts, riscv_out, stack_info);
 }
 
@@ -184,31 +193,25 @@ void Visit(const koopa_raw_value_t value, std::ofstream &riscv_out,StackInfo &st
     {
         case KOOPA_RVT_ALLOC:
         {
-            // alloc 指令分配空间，无需输出代码
-            // 变量的初值 store 指令会处理
             break;
         }
         case KOOPA_RVT_INTEGER:
         {
-            // 立即数只在被用到时由其它指令处理
             break;
         }
         case KOOPA_RVT_LOAD:
         {
-            // load 指令，寄存器保存结果
             auto src = kind.data.load.src;
             int src_offset = GetValueOffset(stack_info, src);
             std::string rd = regs[(reg_cnt++) % 7];
             reg_map[value] = rd;
             riscv_out << "  lw " << rd << ", " << src_offset << "(sp)\n";
-            // 把返回值存入栈帧
             int dst_offset = GetValueOffset(stack_info, value);
             riscv_out << "  sw " << rd << ", " << dst_offset << "(sp)\n";
             break;
         }
         case KOOPA_RVT_STORE:
         {
-            // store 指令没有返回值
             auto src = kind.data.store.value;
             auto dest = kind.data.store.dest;
             std::string rs = "";
@@ -231,7 +234,6 @@ void Visit(const koopa_raw_value_t value, std::ofstream &riscv_out,StackInfo &st
         {
             auto &bin = kind.data.binary;
             std::string lhs, rhs;
-            // 左操作数
             if (bin.lhs->kind.tag == KOOPA_RVT_INTEGER)
             {
                 lhs = regs[(reg_cnt++) % 7];
@@ -243,7 +245,6 @@ void Visit(const koopa_raw_value_t value, std::ofstream &riscv_out,StackInfo &st
                 lhs = regs[(reg_cnt++) % 7];
                 riscv_out << "  lw " << lhs << ", " << lhs_offset << "(sp)\n";
             }
-            // 右操作数
             if (bin.rhs->kind.tag == KOOPA_RVT_INTEGER)
             {
                 rhs = regs[(reg_cnt++) % 7];
@@ -321,23 +322,59 @@ void Visit(const koopa_raw_value_t value, std::ofstream &riscv_out,StackInfo &st
                 default:
                     break;
             }
-            // 把返回值存入栈帧
             int dst_offset = GetValueOffset(stack_info, value);
             riscv_out << "  sw " << rd << ", " << dst_offset << "(sp)\n";
+            break;
+        }
+        // ---------- 关键分支跳转 ----------
+        case KOOPA_RVT_BRANCH:
+        {
+            auto &br = kind.data.branch;
+            // 条件值
+            auto cond = br.cond;
+            std::string cond_reg;
+            if (cond->kind.tag == KOOPA_RVT_INTEGER)
+            {
+                cond_reg = regs[(reg_cnt++) % 7];
+                riscv_out << "  li " << cond_reg << ", " << cond->kind.data.integer.value << "\n";
+            }
+            else
+            {
+                int cond_offset = GetValueOffset(stack_info, cond);
+                cond_reg = regs[(reg_cnt++) % 7];
+                riscv_out << "  lw " << cond_reg << ", " << cond_offset << "(sp)\n";
+            }
+            // label 去掉 %
+            std::string label_true = br.true_bb->name ? std::string(br.true_bb->name) : "";
+            if (!label_true.empty() && label_true[0] == '%') label_true = label_true.substr(1);
+            std::string label_false = br.false_bb->name ? std::string(br.false_bb->name) : "";
+            if (!label_false.empty() && label_false[0] == '%') label_false = label_false.substr(1);
+            riscv_out << "  bnez " << cond_reg << ", " << label_true << "\n";
+            riscv_out << "  j " << label_false << "\n";
+            break;
+        }
+        case KOOPA_RVT_JUMP:
+        {
+            auto &jump = kind.data.jump;
+            std::string label = jump.target->name ? std::string(jump.target->name) : "";
+            if (!label.empty() && label[0] == '%') label = label.substr(1);
+            riscv_out << "  j " << label << "\n";
             break;
         }
         case KOOPA_RVT_RETURN:
         {
             auto &ret = kind.data.ret;
-            std::string src;
-            if (ret.value->kind.tag == KOOPA_RVT_INTEGER)
+            if (ret.value != nullptr)
             {
-                riscv_out << "  li a0, " << ret.value->kind.data.integer.value << "\n";
-            }
-            else
-            {
-                int src_offset = GetValueOffset(stack_info, ret.value);
-                riscv_out << "  lw a0, " << src_offset << "(sp)\n";
+                if (ret.value->kind.tag == KOOPA_RVT_INTEGER)
+                {
+                    riscv_out << "  li a0, " << ret.value->kind.data.integer.value << "\n";
+                }
+                else
+                {
+                    int src_offset = GetValueOffset(stack_info, ret.value);
+                    riscv_out << "  lw a0, " << src_offset << "(sp)\n";
+                }
             }
             riscv_out << "  ret\n";
             break;
