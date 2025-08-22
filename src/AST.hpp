@@ -9,7 +9,7 @@
 #include <stdexcept>
 #include "DCE.hpp"
 
-// ------ Symbol Table and BaseAST ------
+// ------ Symbol Table ------
 
 enum SymbolType
 {
@@ -75,16 +75,6 @@ public:
     }
 };
 
-class BaseAST
-{
-public:
-    virtual ~BaseAST() = default;
-    virtual void Dump(std::ostream& os, int indent = 0) const = 0;
-    virtual std::string EmitKoopa(std::vector<std::string> &code, SymbolTable &symtab) const = 0;
-    virtual int ConstEval(SymbolTable &symtab) const { throw std::runtime_error("Not a const expr"); }
-    virtual void SemanticCheck(SymbolTable &symtab) = 0;
-};
-
 // 工具函数：生成缩进
 inline std::string make_indent(int indent) {
     return std::string(indent * 2, ' ');
@@ -92,8 +82,14 @@ inline std::string make_indent(int indent) {
 
 inline int koopa_tmp_id = 0;
 
+// ------- while 生成 IR 时的辅助栈 -------
+inline std::vector<std::string> break_stack;
+inline std::vector<std::string> continue_stack;
+inline int loop_depth = 0;
+
 // 判断最后一条指令是否是 ret 指令
-inline bool ends_with_ret(const std::vector<std::string>& code) {
+inline bool ends_with_ret(const std::vector<std::string>& code) 
+{
     for (auto it = code.rbegin(); it != code.rend(); ++it) {
         if (it->empty()) continue;
         std::string line = *it;
@@ -103,6 +99,33 @@ inline bool ends_with_ret(const std::vector<std::string>& code) {
     }
     return false;
 }
+
+inline bool ends_with_jump(const std::vector<std::string>& code) 
+{
+    for (auto it = code.rbegin(); it != code.rend(); ++it) 
+    {
+        if (it->empty()) continue;
+        std::string line = *it;
+        line.erase(0, line.find_first_not_of(" \t"));
+        // 检查是否为 jump 指令
+        if (line.find("jump ") == 0) 
+        {
+            return true;
+        }
+        break;
+    }
+    return false;
+}
+
+class BaseAST
+{
+public:
+    virtual ~BaseAST() = default;
+    virtual void Dump(std::ostream& os, int indent = 0) const = 0;
+    virtual std::string EmitKoopa(std::vector<std::string> &code, SymbolTable &symtab) const = 0;
+    virtual int ConstEval(SymbolTable &symtab) const { throw std::runtime_error("Not a const expr"); }
+    virtual void SemanticCheck(SymbolTable &symtab) = 0;
+};
 
 // ------ Expression ASTs ------
 
@@ -407,16 +430,21 @@ public:
         ASSIGN,
         RETURN,
         EXPR,
-        BLOCK
+        BLOCK,
+        WHILE_STMT,
+        BREAK_STMT,
+        CONTINUE_STMT
     } kind;
     std::string lval;
     std::unique_ptr<BaseAST> exp;
     std::unique_ptr<BaseAST> block;
+    std::unique_ptr<BaseAST> while_stmt;
     bool has_exp = false;
 
     StmtAST() : kind(EXPR), has_exp(false) {}
 
-    void Dump(std::ostream& os, int indent = 0) const override {
+    void Dump(std::ostream& os, int indent = 0) const override
+    {
         os << make_indent(indent) << "StmtAST { ";
         switch (kind)
         {
@@ -435,6 +463,16 @@ public:
         case BLOCK:
             os << "\n";
             if (block) block->Dump(os, indent+1);
+            break;
+        case WHILE_STMT:
+            os << "WHILE, stmt:\n";
+            if (while_stmt) while_stmt->Dump(os, indent+1);
+            break;
+        case BREAK_STMT:
+            os << "BREAK\n";
+            break;
+        case CONTINUE_STMT:
+            os << "CONTINUE\n";
             break;
         }
         os << make_indent(indent) << "}\n";
@@ -485,6 +523,25 @@ public:
             block->EmitKoopa(code, symtab);
             return "";
         }
+        case WHILE_STMT:
+        {
+            if (while_stmt)
+                while_stmt->EmitKoopa(code, symtab);
+            return "";
+        }
+        case BREAK_STMT:
+        {
+            // 关键处理
+            assert(!break_stack.empty() && "break must be inside loop!");
+            code.push_back("jump " + break_stack.back());
+            return "";
+        }
+        case CONTINUE_STMT:
+        {
+            assert(!continue_stack.empty() && "continue must be inside loop!");
+            code.push_back("jump " + continue_stack.back());
+            return "";
+        }
         }
         return "";
     }
@@ -520,9 +577,29 @@ public:
             block->SemanticCheck(symtab);
             break;
         }
+        case WHILE_STMT:
+        {
+            if (while_stmt)
+                while_stmt->SemanticCheck(symtab);
+            break;
+        }
+        case BREAK_STMT:
+        {
+            if (loop_depth == 0)
+                throw std::runtime_error("break not in loop!");
+            break;
+        }
+        case CONTINUE_STMT:
+        {
+            if (loop_depth == 0)
+                throw std::runtime_error("continue not in loop!");
+            break;
+        }
         }
     }
 };
+
+// If 语句 AST
 
 class IfStmtAST : public BaseAST
 {
@@ -566,7 +643,7 @@ public:
         // THEN 分支
         code.push_back(then_bb + ":");
         then_stmt->EmitKoopa(code, symtab);
-        if (!ends_with_ret(code))
+        if (!ends_with_ret(code) && !ends_with_jump(code))
             code.push_back("jump " + end_bb);
 
         // ELSE 分支
@@ -574,12 +651,100 @@ public:
         {
             code.push_back(else_bb + ":");
             else_stmt->EmitKoopa(code, symtab);
-            if (!ends_with_ret(code))
+            if (!ends_with_ret(code) && !ends_with_jump(code))
                 code.push_back("jump " + end_bb);
         }
 
         code.push_back(end_bb + ":");
         return "";
+    }
+};
+
+// 循环语句 AST
+
+class WhileStmtAST : public BaseAST
+{
+public:
+    std::unique_ptr<BaseAST> cond;
+    std::unique_ptr<BaseAST> body;
+    void Dump(std::ostream& os, int indent = 0) const override {/*略*/}
+    void SemanticCheck(SymbolTable &symtab) override 
+    {
+        ++loop_depth;
+        cond->SemanticCheck(symtab);
+        body->SemanticCheck(symtab);
+        --loop_depth;
+    }
+    std::string EmitKoopa(std::vector<std::string> &code, SymbolTable &symtab) const override
+    {
+        std::string while_cond_bb = "%while_cond_" + std::to_string(koopa_tmp_id++);
+        std::string while_body_bb = "%while_body_" + std::to_string(koopa_tmp_id++);
+        std::string while_end_bb = "%while_end_" + std::to_string(koopa_tmp_id++);
+        // 记录break/continue目标块
+        break_stack.push_back(while_end_bb);
+        continue_stack.push_back(while_cond_bb);
+
+        code.push_back("jump " + while_cond_bb);
+        code.push_back(while_cond_bb + ":");
+        std::string cond_val = cond->EmitKoopa(code, symtab);
+        code.push_back("br " + cond_val + ", " + while_body_bb + ", " + while_end_bb);
+
+        code.push_back(while_body_bb + ":");
+        body->EmitKoopa(code, symtab);
+        if (!ends_with_ret(code) && !ends_with_jump(code))
+            code.push_back("jump " + while_cond_bb);
+
+        code.push_back(while_end_bb + ":");
+        break_stack.pop_back();
+        continue_stack.pop_back();
+        return "";
+    }
+};
+
+class BreakAST : public BaseAST 
+{
+public:
+    void Dump(std::ostream& os, int indent = 0) const override
+    {
+        os << make_indent(indent) << "BreakAST {}\n";
+    }
+    std::string EmitKoopa(std::vector<std::string>& code, SymbolTable& symtab) const override 
+    {
+        // 需要从上下文获取break目标块
+        extern std::vector<std::string> break_stack;
+        assert(!break_stack.empty() && "break must be inside loop!");
+        code.push_back("jump " + break_stack.back());
+        return "";
+    }
+    void SemanticCheck(SymbolTable&) override 
+    {
+        extern int loop_depth;
+        if (loop_depth == 0)
+        {
+            throw std::runtime_error("break not in loop!");
+        }
+    }
+};
+
+class ContinueAST : public BaseAST 
+{
+public:
+    void Dump(std::ostream& os, int indent = 0) const override 
+    {
+        os << make_indent(indent) << "ContinueAST {}\n";
+    }
+    std::string EmitKoopa(std::vector<std::string>& code, SymbolTable& symtab) const override 
+    {
+        extern std::vector<std::string> continue_stack;
+        assert(!continue_stack.empty() && "continue must be inside loop!");
+        code.push_back("jump " + continue_stack.back());
+        return "";
+    }
+    void SemanticCheck(SymbolTable&) override 
+    {
+        extern int loop_depth;
+        if (loop_depth == 0)
+            throw std::runtime_error("continue not in loop!");
     }
 };
 
@@ -695,7 +860,27 @@ public:
     {
         SymbolTable local_tab(&parent_tab);
         for (auto &item : items)
-            item->EmitKoopa(code, local_tab);
+        {
+            StmtAST *stmt = dynamic_cast<StmtAST *>(item.get());
+            if (stmt)
+            {
+                switch (stmt->kind)
+                {
+                case StmtAST::BREAK_STMT:
+                case StmtAST::CONTINUE_STMT:
+                case StmtAST::RETURN:
+                    stmt->EmitKoopa(code, local_tab);
+                    return ""; // 或break;
+                default:
+                    stmt->EmitKoopa(code, local_tab);
+                    break;
+                }
+            }
+            else
+            {
+                item->EmitKoopa(code, local_tab);
+            }
+        }
         return "";
     }
 

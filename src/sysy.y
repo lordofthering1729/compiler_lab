@@ -36,11 +36,11 @@
 %token <str_val> IDENT
 %token <int_val> INT_CONST
 %token LE GE EQ NE AND OR
-%token IF ELSE
+%token IF ELSE WHILE BREAK CONTINUE
 
 %type <ast_val> FuncDef FuncType Block BlockItem Stmt Decl ConstDecl VarDecl ConstInitVal InitVal Exp PrimaryExp Number UnaryExp MulExp AddExp RelExp EqExp LAndExp LOrExp ConstExp
-%type <ast_val> StmtNoIf
-%type <ast_val> IfStmtNoElse IfStmtWithElse
+%type <ast_val> StmtNoBranch
+%type <ast_val> IfStmtNoElse IfStmtWithElse WhileStmt
 %type <str_val> UnaryOp LVal
 %type <vec_blockitem> BlockItemList
 %type <vec_constdef> ConstDefList
@@ -249,9 +249,23 @@ InitVal
 
 /* ==== 拆分法核心 ==== */
 Stmt
-    : IfStmtWithElse     /* 有 else 的 if */
-    | IfStmtNoElse       /* 无 else 的 if */
-    | StmtNoIf         /* 其它语句 */
+    : IfStmtWithElse
+    | IfStmtNoElse
+    | StmtNoBranch
+    | WhileStmt
+    | BREAK ';'
+      {
+        auto ast = new StmtAST();
+        ast->kind = StmtAST::BREAK_STMT;
+        $$ = ast;
+      }
+    | CONTINUE ';'
+      {
+        auto ast = new StmtAST();
+        ast->kind = StmtAST::CONTINUE_STMT;
+        $$ = ast;
+      }
+    ;
 
 IfStmtNoElse
     : IF '(' Exp ')' Stmt
@@ -274,7 +288,7 @@ IfStmtWithElse
         ast->has_else = true;
         $$ = ast;
     }
-    | IF '(' Exp ')' StmtNoIf ELSE Stmt
+    | IF '(' Exp ')' StmtNoBranch ELSE Stmt
     {
         auto ast = new IfStmtAST();
         ast->cond = std::unique_ptr<BaseAST>($3);
@@ -285,8 +299,7 @@ IfStmtWithElse
     }
     ;
 
-/* StmtNoIf 不能包含 if 语句 */
-StmtNoIf
+StmtNoBranch
     : LVal '=' Exp ';'
     {
         auto ast = new StmtAST();
@@ -331,6 +344,19 @@ StmtNoIf
         ast->kind = StmtAST::RETURN;
         ast->has_exp = false;
         $$ = ast;
+    }
+    ;
+
+WhileStmt
+    : WHILE '(' Exp ')' Stmt
+    {
+        auto while_ast = new WhileStmtAST();
+        while_ast->cond = std::unique_ptr<BaseAST>($3);
+        while_ast->body = std::unique_ptr<BaseAST>($5);
+        auto stmt = new StmtAST();
+        stmt->kind = StmtAST::WHILE_STMT;
+        stmt->while_stmt = std::unique_ptr<BaseAST>(while_ast);
+        $$ = stmt;
     }
     ;
 
