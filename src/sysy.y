@@ -14,87 +14,188 @@
     #include "AST.hpp"
     #include <string>
     int yylex();
-    void yyerror(std::unique_ptr<BaseAST> &ast, const char *s);
+    void yyerror(std::vector<std::unique_ptr<BaseAST>> &ast_items, const char *s);
     extern int yylineno;
+    SymbolTable global_symtab(nullptr);
     using namespace std;
 %}
 
-%parse-param { std::unique_ptr<BaseAST> &ast }
+%parse-param { std::vector<std::unique_ptr<BaseAST>> &ast_items }
 %union
 {
     std::string *str_val;
     int int_val;
     BaseAST *ast_val;
     std::vector<BaseAST*> *vec_blockitem;
+    std::vector<BaseAST*> *vec_globalitem;
     std::vector<ConstDeclAST::Def> *vec_constdef;
     std::vector<VarDeclAST::Def> *vec_vardef;
     ConstDeclAST::Def *constdef_ptr;
     VarDeclAST::Def *vardef_ptr;
+    std::vector<BaseAST*> *vec_funcrparams;
+    std::vector<FuncFParamAST*> *vec_funcfparam;
 }
 
-%token INT RETURN CONST
+%token INT RETURN CONST VOID
 %token <str_val> IDENT
 %token <int_val> INT_CONST
 %token LE GE EQ NE AND OR
 %token IF ELSE WHILE BREAK CONTINUE
 
-%type <ast_val> FuncDef FuncType Block BlockItem Stmt Decl ConstDecl VarDecl ConstInitVal InitVal Exp PrimaryExp Number UnaryExp MulExp AddExp RelExp EqExp LAndExp LOrExp ConstExp
-%type <ast_val> StmtNoBranch
-%type <ast_val> IfStmtNoElse IfStmtWithElse WhileStmt
-%type <str_val> UnaryOp LVal
+%type <vec_globalitem> GlobalSeq
+%type <ast_val> GlobalItem FuncDef Block BlockItem Stmt Decl ConstDecl VarDecl ConstInitVal InitVal Exp ConstExp PrimaryExp Number UnaryExp MulExp AddExp RelExp EqExp LAndExp LOrExp
+%type <ast_val> StmtNoBranch IfStmtNoElse IfStmtWithElse WhileStmt FuncFParam
 %type <vec_blockitem> BlockItemList
 %type <vec_constdef> ConstDefList
 %type <vec_vardef> VarDefList
 %type <constdef_ptr> ConstDef
 %type <vardef_ptr> VarDef
+%type <vec_funcfparam> FuncFParamList
+%type <vec_funcrparams> FuncRParams
+%type <str_val> UnaryOp LVal
+
+%start TopLevel
 
 %%
 
-CompUnit
-    : FuncDef
+TopLevel
+    : GlobalSeq
     {
-        assert($1 != nullptr);
-        auto comp_unit = make_unique<CompUnitAST>();
-        comp_unit->func_def = unique_ptr<BaseAST>($1);
-        ast = move(comp_unit);
+        ast_items.clear();
+        auto vec = static_cast<std::vector<BaseAST*>*>($1);
+        for (auto* item : *vec)
+            ast_items.push_back(std::unique_ptr<BaseAST>(item));
+        delete vec;
     }
     ;
 
-FuncDef
-    : FuncType IDENT '(' ')' Block
+GlobalSeq
+    : /* empty */ { $$ = new std::vector<BaseAST*>(); }
+    | GlobalSeq GlobalItem
     {
-        assert($1 != nullptr);
-        assert($2 != nullptr);
-        assert($5 != nullptr);
-        auto ast = new FuncDefAST();
-        ast->func_type = unique_ptr<BaseAST>($1);
-        ast->ident = *unique_ptr<string>($2);
-        ast->block = unique_ptr<BaseAST>($5);
+        auto vec = static_cast<std::vector<BaseAST*>*>($1);
+        vec->push_back($2);
+        $$ = vec;
+    }
+    ;
+
+GlobalItem
+    : FuncDef { $$ = $1; }
+    | CONST INT ConstDefList ';'
+    {
+        auto ast = new ConstDeclAST();
+        ast->is_global = true;
+        for (auto &def : *static_cast<std::vector<ConstDeclAST::Def>*>($3))
+        {
+            ast->defs.push_back(std::move(def));
+        }
+        delete static_cast<std::vector<ConstDeclAST::Def>*>($3);
+        $$ = ast;
+    }
+    | INT VarDefList ';'
+    {
+        auto ast = new VarDeclAST();
+        ast->is_global = true;
+        for (auto &def : *static_cast<std::vector<VarDeclAST::Def>*>($2))
+        {
+            ast->defs.push_back(std::move(def));
+        }
+        delete static_cast<std::vector<VarDeclAST::Def>*>($2);
         $$ = ast;
     }
     ;
 
-FuncType
-    : INT
+FuncDef
+    : INT IDENT '(' ')' Block
     {
-        auto ast = new FuncTypeAST();
+        auto ast = new FuncDefAST();
+        ast->ret_type = "int";
+        ast->ident = *std::unique_ptr<std::string>($2);
+        ast->params = nullptr;
+        ast->block = std::unique_ptr<BaseAST>($5);
+        $$ = ast;
+    }
+    | VOID IDENT '(' ')' Block
+    {
+        auto ast = new FuncDefAST();
+        ast->ret_type = "void";
+        ast->ident = *std::unique_ptr<std::string>($2);
+        ast->params = nullptr;
+        ast->block = std::unique_ptr<BaseAST>($5);
+        $$ = ast;
+    }
+    | INT IDENT '(' FuncFParamList ')' Block
+    {
+        auto ast = new FuncDefAST();
+        ast->ret_type = "int";
+        ast->ident = *std::unique_ptr<std::string>($2);
+        auto params_ast = new FuncFParamsAST();
+        for (auto &param : *static_cast<std::vector<FuncFParamAST*>*>($4))
+        {
+            params_ast->params.push_back(std::unique_ptr<FuncFParamAST>(param));
+        }
+        delete static_cast<std::vector<FuncFParamAST*>*>($4);
+        ast->params = std::unique_ptr<FuncFParamsAST>(params_ast);
+        ast->block = std::unique_ptr<BaseAST>($6);
+        $$ = ast;
+    }
+    | VOID IDENT '(' FuncFParamList ')' Block
+    {
+        auto ast = new FuncDefAST();
+        ast->ret_type = "void";
+        ast->ident = *std::unique_ptr<std::string>($2);
+        auto params_ast = new FuncFParamsAST();
+        for (auto &param : *static_cast<std::vector<FuncFParamAST*>*>($4))
+        {
+            params_ast->params.push_back(std::unique_ptr<FuncFParamAST>(param));
+        }
+        delete static_cast<std::vector<FuncFParamAST*>*>($4);
+        ast->params = std::unique_ptr<FuncFParamsAST>(params_ast);
+        ast->block = std::unique_ptr<BaseAST>($6);
+        $$ = ast;
+    }
+    ;
+
+FuncFParamList
+    : FuncFParam
+    {
+        auto vec = new std::vector<FuncFParamAST*>();
+        vec->push_back(static_cast<FuncFParamAST*>($1));
+        $$ = vec;
+    }
+    | FuncFParamList ',' FuncFParam
+    {
+        auto vec = static_cast<std::vector<FuncFParamAST*>*>($1);
+        vec->push_back(static_cast<FuncFParamAST*>($3));
+        $$ = vec;
+    }
+    ;
+
+FuncFParam
+    : INT IDENT
+    {
+        auto ast = new FuncFParamAST();
         ast->type = "int";
+        ast->name = *std::unique_ptr<std::string>($2);
         $$ = ast;
     }
     ;
 
 Block
-    : '{' '}'
+    : '{'
+      '}'
     {
         auto ast = new BlockAST();
         $$ = ast;
     }
-    | '{' BlockItemList '}'
+    | '{'
+      BlockItemList
+      '}'
     {
         auto ast = new BlockAST();
         for (auto &item : *static_cast<std::vector<BaseAST*>*>($2))
         {
-            ast->items.push_back(unique_ptr<BaseAST>(item));
+            ast->items.push_back(std::unique_ptr<BaseAST>(item));
         }
         delete static_cast<std::vector<BaseAST*>*>($2);
         $$ = ast;
@@ -117,25 +218,13 @@ BlockItemList
     ;
 
 BlockItem
-    : Decl
-    {
-        $$ = $1;
-    }
-    | Stmt
-    {
-        $$ = $1;
-    }
+    : Decl { $$ = $1; }
+    | Stmt { $$ = $1; }
     ;
 
 Decl
-    : ConstDecl
-    {
-        $$ = $1;
-    }
-    | VarDecl
-    {
-        $$ = $1;
-    }
+    : ConstDecl { $$ = $1; }
+    | VarDecl { $$ = $1; }
     ;
 
 ConstDecl
@@ -179,17 +268,11 @@ ConstDef
     ;
 
 ConstInitVal
-    : ConstExp
-    {
-        $$ = $1;
-    }
+    : ConstExp { $$ = $1; }
     ;
 
 ConstExp
-    : Exp
-    {
-        $$ = $1;
-    }
+    : Exp { $$ = $1; }
     ;
 
 VarDecl
@@ -241,13 +324,9 @@ VarDef
     ;
 
 InitVal
-    : Exp
-    {
-        $$ = $1;
-    }
+    : Exp { $$ = $1; }
     ;
 
-/* ==== 拆分法核心 ==== */
 Stmt
     : IfStmtWithElse
     | IfStmtNoElse
@@ -304,8 +383,8 @@ StmtNoBranch
     {
         auto ast = new StmtAST();
         ast->kind = StmtAST::ASSIGN;
-        ast->lval = *unique_ptr<string>($1);
-        ast->exp = unique_ptr<BaseAST>($3);
+        ast->lval = *std::unique_ptr<std::string>($1);
+        ast->exp = std::unique_ptr<BaseAST>($3);
         $$ = ast;
     }
     | Exp ';'
@@ -313,7 +392,7 @@ StmtNoBranch
         auto ast = new StmtAST();
         ast->kind = StmtAST::EXPR;
         ast->has_exp = true;
-        ast->exp = unique_ptr<BaseAST>($1);
+        ast->exp = std::unique_ptr<BaseAST>($1);
         $$ = ast;
     }
     | ';'
@@ -327,7 +406,7 @@ StmtNoBranch
     {
         auto ast = new StmtAST();
         ast->kind = StmtAST::BLOCK;
-        ast->block = unique_ptr<BaseAST>($1);
+        ast->block = std::unique_ptr<BaseAST>($1);
         $$ = ast;
     }
     | RETURN Exp ';'
@@ -335,7 +414,7 @@ StmtNoBranch
         auto ast = new StmtAST();
         ast->kind = StmtAST::RETURN;
         ast->has_exp = true;
-        ast->exp = unique_ptr<BaseAST>($2);
+        ast->exp = std::unique_ptr<BaseAST>($2);
         $$ = ast;
     }
     | RETURN ';'
@@ -361,10 +440,7 @@ WhileStmt
     ;
 
 LVal
-    : IDENT
-    {
-        $$ = $1;
-    }
+    : IDENT { $$ = $1; }
     ;
 
 Exp
@@ -377,9 +453,7 @@ Exp
     ;
 
 LAndExp
-  : EqExp {
-      $$ = $1;
-    }
+  : EqExp { $$ = $1; }
   | LAndExp AND EqExp {
       auto ast = new BinaryExpAST();
       ast->op = "&&";
@@ -390,9 +464,7 @@ LAndExp
   ;
 
 LOrExp
-  : LAndExp {
-      $$ = $1;
-    }
+  : LAndExp { $$ = $1; }
   | LOrExp OR LAndExp {
       auto ast = new BinaryExpAST();
       ast->op = "||";
@@ -403,9 +475,7 @@ LOrExp
   ;
 
 EqExp
-  : RelExp {
-      $$ = $1;
-    }
+  : RelExp { $$ = $1; }
   | EqExp EQ RelExp {
       auto ast = new BinaryExpAST();
       ast->op = "==";
@@ -423,9 +493,7 @@ EqExp
   ;
 
 RelExp
-  : AddExp {
-      $$ = $1;
-    }
+  : AddExp { $$ = $1; }
   | RelExp '<' AddExp {
       auto ast = new BinaryExpAST();
       ast->op = "<";
@@ -457,20 +525,15 @@ RelExp
   ;
 
 AddExp
-    : MulExp
-    {
-        $$ = $1;
-    }
-    | AddExp '+' MulExp
-    {
+    : MulExp { $$ = $1; }
+    | AddExp '+' MulExp {
         auto ast = new BinaryExpAST();
         ast->op = "+";
         ast->lhs = std::unique_ptr<BaseAST>($1);
         ast->rhs = std::unique_ptr<BaseAST>($3);
         $$ = ast;
     }
-    | AddExp '-' MulExp
-    {
+    | AddExp '-' MulExp {
         auto ast = new BinaryExpAST();
         ast->op = "-";
         ast->lhs = std::unique_ptr<BaseAST>($1);
@@ -480,28 +543,22 @@ AddExp
     ;
 
 MulExp
-    : UnaryExp
-    {
-        $$ = $1;
-    }
-    | MulExp '*' UnaryExp
-    {
+    : UnaryExp { $$ = $1; }
+    | MulExp '*' UnaryExp {
         auto ast = new BinaryExpAST();
         ast->op = "*";
         ast->lhs = std::unique_ptr<BaseAST>($1);
         ast->rhs = std::unique_ptr<BaseAST>($3);
         $$ = ast;
     }
-    | MulExp '/' UnaryExp
-    {
+    | MulExp '/' UnaryExp {
         auto ast = new BinaryExpAST();
         ast->op = "/";
         ast->lhs = std::unique_ptr<BaseAST>($1);
         ast->rhs = std::unique_ptr<BaseAST>($3);
         $$ = ast;
     }
-    | MulExp '%' UnaryExp
-    {
+    | MulExp '%' UnaryExp {
         auto ast = new BinaryExpAST();
         ast->op = "%";
         ast->lhs = std::unique_ptr<BaseAST>($1);
@@ -511,48 +568,62 @@ MulExp
     ;
 
 UnaryExp
-  : PrimaryExp {
-      $$ = $1;
+    : PrimaryExp { $$ = $1; }
+    | UnaryOp UnaryExp {
+        auto ast = new UnaryExpAST();
+        ast->op = *$1;
+        ast->exp = std::unique_ptr<BaseAST>($2);
+        $$ = ast;
     }
-  | UnaryOp UnaryExp {
-      auto ast = new UnaryExpAST();
-      ast->op = *$1;
-      ast->exp = std::unique_ptr<BaseAST>($2);
-      $$ = ast;
+    | IDENT '(' ')' {
+        auto ast = new FuncCallAST();
+        ast->name = *std::unique_ptr<std::string>($1);
+        $$ = ast;
     }
-  ;
-
-UnaryOp
-    : '+'
-    {
-        $$ = new std::string("+");
-    }
-    | '-'
-    {
-        $$ = new std::string("-");
-    }
-    | '!'
-    {
-        $$ = new std::string("!");
+    | IDENT '(' FuncRParams ')' {
+        auto ast = new FuncCallAST();
+        ast->name = *std::unique_ptr<std::string>($1);
+        for (auto &arg : *static_cast<std::vector<BaseAST*>*>($3))
+        {
+            ast->args.push_back(std::unique_ptr<BaseAST>(arg));
+        }
+        delete static_cast<std::vector<BaseAST*>*>($3);
+        $$ = ast;
     }
     ;
 
+FuncRParams
+    : Exp {
+        auto vec = new std::vector<BaseAST*>();
+        vec->push_back($1);
+        $$ = vec;
+    }
+    | FuncRParams ',' Exp {
+        auto vec = static_cast<std::vector<BaseAST*>*>($1);
+        vec->push_back($3);
+        $$ = vec;
+    }
+    ;
+
+UnaryOp
+    : '+' { $$ = new std::string("+"); }
+    | '-' { $$ = new std::string("-"); }
+    | '!' { $$ = new std::string("!"); }
+    ;
+
 PrimaryExp
-    : '(' Exp ')'
-    {
+    : '(' Exp ')' {
         auto ast = new PrimaryExpAST();
         ast->is_number = false;
         ast->exp = std::unique_ptr<BaseAST>($2);
         $$ = ast;
     }
-    | LVal
-    {
+    | LVal {
         auto ast = new IdentAST();
-        ast->name = *unique_ptr<string>($1);
+        ast->name = *std::unique_ptr<std::string>($1);
         $$ = ast;
     }
-    | Number
-    {
+    | Number {
         auto ast = new PrimaryExpAST();
         ast->is_number = true;
         ast->number_value = dynamic_cast<NumberAST*>($1)->value;
@@ -561,8 +632,7 @@ PrimaryExp
     ;
 
 Number
-    : INT_CONST
-    {
+    : INT_CONST {
         auto ast = new NumberAST();
         ast->value = $1;
         $$ = ast;
@@ -571,7 +641,7 @@ Number
 
 %%
 
-void yyerror(std::unique_ptr<BaseAST> &ast, const char *s)
+void yyerror(std::vector<std::unique_ptr<BaseAST>> &ast_items, const char *s)
 {
     std::cerr << "error: " << s << " at line " << yylineno << std::endl;
 }

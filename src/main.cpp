@@ -7,16 +7,16 @@
 #include <string>
 #include <vector>
 #include <map>
-
 using namespace std;
 
 extern FILE *yyin;
-extern int yyparse(unique_ptr<BaseAST>& ast);
-extern void deal_koopa(const char* str,const char* fn);
+extern int yyparse(std::vector<std::unique_ptr<BaseAST>>& ast_items);
+extern void deal_koopa(const char* str, const char* fn);
+extern void register_sysy_lib(SymbolTable &symtab);
+extern std::string koopa_sysy_lib_decls();
 
-int main(int argc, const char *argv[]) 
+int main(int argc, const char *argv[])
 {
-    std::cout<< "Starting main function...\n";
     assert(argc == 5);
     auto mode = argv[1];
     auto input = argv[2];
@@ -25,28 +25,36 @@ int main(int argc, const char *argv[])
     yyin = fopen(input, "r");
     assert(yyin);
 
-    unique_ptr<BaseAST> ast;
-    auto ret = yyparse(ast);
+    std::vector<std::unique_ptr<BaseAST>> ast_items;
+    auto ret = yyparse(ast_items);
     assert(!ret);
 
     SymbolTable root_tab;
-    ast->SemanticCheck(root_tab); // 语义检查
+    register_sysy_lib(root_tab);
 
-    std::cout << "Semantic check passed.\n";
-    if(mode[1] == 'k')
+    std::vector<std::string> code;
+    std::string koopa_ir;
+    koopa_ir += koopa_sysy_lib_decls();
+
+    //std::cerr << "Warning: Input does not have a single CompUnitAST root. Processing each AST node individually.\n";
+    // 向前兼容：每个AST节点单独处理
+    for (auto& item : ast_items) 
     {
-        //ast->Dump(std::cout);
-        std::vector<std::string> code;
-        std::string koopa_ir = ast->EmitKoopa(code, root_tab);
+        item->SemanticCheck(root_tab);
+    }
+    root_tab.Print();
+    for (auto& item : ast_items) 
+    {
+        koopa_ir += item->EmitKoopa(code, root_tab);
+        //std::cerr << "After emitting Koopa IR for an AST node, koopa_ir = " << std::endl << koopa_ir << std::endl;
+    }
+
+    if (mode[1] == 'k') {
         std::ofstream ofs(output, std::ios::out | std::ios::trunc);
         ofs << koopa_ir;
         ofs.close();
     }
-    else if(mode[1] == 'r')
-    {
-        std::vector<std::string> code;
-        std::string koopa_ir = ast->EmitKoopa(code, root_tab);
+    else if (mode[1] == 'r') {
         deal_koopa(koopa_ir.c_str(), output);
     }
-    std::cout<< "Ending main function...\n";
 }

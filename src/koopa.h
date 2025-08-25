@@ -440,7 +440,8 @@ typedef struct {
   } data;
 } koopa_raw_value_kind_t;
 
-struct koopa_raw_value_data {
+struct koopa_raw_value_data 
+{
   /// Type of value.
   koopa_raw_type_t ty;
   /// Name of value, null if no name.

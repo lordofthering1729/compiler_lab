@@ -10,17 +10,20 @@
 #include "DCE.hpp"
 
 // ------ Symbol Table ------
-
 enum SymbolType
 {
-    CONSTANT, VAR
+    CONSTANT, VAR, FUNCTION
 };
 
 struct SymbolInfo
 {
     SymbolType type;
-    int value;
+    int value; // For const/var
     std::string koopa_name;
+    std::string ret_type; // For function: "int"/"void"
+    std::vector<std::string> params; // function param names
+    std::vector<std::string> param_types;
+    bool is_global = false; // 新增字段：区分是否全局变量
 };
 
 class SymbolTable
@@ -34,24 +37,19 @@ public:
     SymbolTable(SymbolTable *parent = nullptr)
         : parent(parent)
     {
-        if (parent)
-        {
-            scope_id = parent->scope_id + 1;
-        }
-        else
-        {
-            scope_id = 0;
-        }
+        scope_id = parent ? parent->scope_id + 1 : 0;
         var_cnt = 0;
     }
 
-    bool add(const std::string &name, SymbolType type, int value, std::string koopa_name = "")
+    bool add(const std::string &name, SymbolType type, int value = 0, std::string koopa_name = "",
+             std::string ret_type = "", const std::vector<std::string>& params = {},
+             const std::vector<std::string>& param_types = {}, bool is_global = false)
     {
         if (table.count(name))
         {
             return false;
         }
-        table[name] = {type, value, koopa_name};
+        table[name] = {type, value, koopa_name, ret_type, params, param_types, is_global};
         return true;
     }
 
@@ -73,24 +71,62 @@ public:
         }
         return nullptr;
     }
+
+    void Print(std::ostream& os = std::cout, int indent = 0) const
+    {
+        std::string ind = std::string(indent * 2, ' ');
+        os << ind << "SymbolTable (scope_id=" << scope_id << ")\n";
+        for (const auto& kv : table)
+        {
+            const auto& name = kv.first;
+            const auto& info = kv.second;
+            os << ind << "  [" << name << "] ";
+            switch(info.type)
+            {
+                case CONSTANT:
+                    os << "CONSTANT, value=" << info.value;
+                    break;
+                case VAR:
+                    os << "VAR, value=" << info.value << ", koopa_name=" << info.koopa_name;
+                    break;
+                case FUNCTION:
+                    os << "FUNCTION, ret_type=" << info.ret_type;
+                    if(!info.params.empty())
+                    {
+                        os << ", params=(";
+                        for(size_t i=0; i<info.params.size(); ++i)
+                        {
+                            os << info.param_types[i] << " " << info.params[i];
+                            if(i+1 != info.params.size()) os << ", ";
+                        }
+                        os << ")";
+                    }
+                    break;
+            }
+            os << ", is_global=" << (info.is_global ? "true" : "false") << "\n";
+        }
+        if(parent)
+        {
+            os << ind << "  Parent:\n";
+            parent->Print(os, indent+1);
+        }
+    }
 };
 
-// 工具函数：生成缩进
-inline std::string make_indent(int indent) {
-    return std::string(indent * 2, ' ');
-}
-
 inline int koopa_tmp_id = 0;
-
-// ------- while 生成 IR 时的辅助栈 -------
 inline std::vector<std::string> break_stack;
 inline std::vector<std::string> continue_stack;
 inline int loop_depth = 0;
 
-// 判断最后一条指令是否是 ret 指令
-inline bool ends_with_ret(const std::vector<std::string>& code) 
+inline std::string make_indent(int indent)
 {
-    for (auto it = code.rbegin(); it != code.rend(); ++it) {
+    return std::string(indent * 2, ' ');
+}
+
+inline bool ends_with_ret(const std::vector<std::string>& code)
+{
+    for (auto it = code.rbegin(); it != code.rend(); ++it)
+    {
         if (it->empty()) continue;
         std::string line = *it;
         line.erase(0, line.find_first_not_of(" \t"));
@@ -100,15 +136,14 @@ inline bool ends_with_ret(const std::vector<std::string>& code)
     return false;
 }
 
-inline bool ends_with_jump(const std::vector<std::string>& code) 
+inline bool ends_with_jump(const std::vector<std::string>& code)
 {
-    for (auto it = code.rbegin(); it != code.rend(); ++it) 
+    for (auto it = code.rbegin(); it != code.rend(); ++it)
     {
         if (it->empty()) continue;
         std::string line = *it;
         line.erase(0, line.find_first_not_of(" \t"));
-        // 检查是否为 jump 指令
-        if (line.find("jump ") == 0) 
+        if (line.find("jump ") == 0)
         {
             return true;
         }
@@ -117,6 +152,33 @@ inline bool ends_with_jump(const std::vector<std::string>& code)
     return false;
 }
 
+// ------ SysY Library ------
+inline void register_sysy_lib(SymbolTable& symtab)
+{
+    symtab.add("getint", FUNCTION, 0, "", "int", {}, {});
+    symtab.add("getch", FUNCTION, 0, "", "int", {}, {});
+    symtab.add("getarray", FUNCTION, 0, "", "int", {"arr"}, {"int[]"});
+    symtab.add("putint", FUNCTION, 0, "", "void", {"x"}, {"int"});
+    symtab.add("putch", FUNCTION, 0, "", "void", {"x"}, {"int"});
+    symtab.add("putarray", FUNCTION, 0, "", "void", {"n", "arr"}, {"int", "int[]"});
+    symtab.add("starttime", FUNCTION, 0, "", "void", {}, {});
+    symtab.add("stoptime", FUNCTION, 0, "", "void", {}, {});
+}
+
+inline std::string koopa_sysy_lib_decls()
+{
+    std::string decls;
+    decls += "decl @getint(): i32\n";
+    decls += "decl @getch(): i32\n";
+    decls += "decl @getarray(*i32): i32\n";
+    decls += "decl @putint(i32)\n";
+    decls += "decl @putch(i32)\n";
+    decls += "decl @putarray(i32, *i32)\n";
+    decls += "decl @starttime()\n";
+    decls += "decl @stoptime()\n";
+    return decls;
+}
+// ------ AST Base ------
 class BaseAST
 {
 public:
@@ -128,23 +190,19 @@ public:
 };
 
 // ------ Expression ASTs ------
-
 class NumberAST : public BaseAST
 {
 public:
     int value;
-
-    void Dump(std::ostream& os, int indent = 0) const override {
+    void Dump(std::ostream& os, int indent = 0) const override
+    {
         os << make_indent(indent) << "NumberAST { " << value << " }\n";
     }
-
     std::string EmitKoopa(std::vector<std::string> &, SymbolTable &) const override
     {
         return std::to_string(value);
     }
-
     int ConstEval(SymbolTable &) const override { return value; }
-
     void SemanticCheck(SymbolTable &) override {}
 };
 
@@ -155,11 +213,13 @@ public:
     std::unique_ptr<BaseAST> exp;
     int number_value = 0;
 
-    void Dump(std::ostream& os, int indent = 0) const override {
+    void Dump(std::ostream& os, int indent = 0) const override
+    {
         os << make_indent(indent) << "PrimaryExpAST { ";
         if (is_number)
             os << number_value;
-        else {
+        else
+        {
             os << "\n";
             if (exp) exp->Dump(os, indent+1);
             os << make_indent(indent);
@@ -190,7 +250,8 @@ class IdentAST : public BaseAST
 public:
     std::string name;
 
-    void Dump(std::ostream& os, int indent = 0) const override {
+    void Dump(std::ostream& os, int indent = 0) const override
+    {
         os << make_indent(indent) << "IdentAST { " << name << " }\n";
     }
 
@@ -203,9 +264,15 @@ public:
             return std::to_string(info->value);
         else
         {
-            std::string tmp = "%" + std::to_string(koopa_tmp_id++);
-            code.push_back(tmp + " = load " + info->koopa_name);
-            return tmp;
+            if (info->is_global) {
+                std::string tmp = "%" + std::to_string(koopa_tmp_id++);
+                code.push_back(tmp + " = load " + info->koopa_name);
+                return tmp;
+            } else {
+                std::string tmp = "%" + std::to_string(koopa_tmp_id++);
+                code.push_back(tmp + " = load " + info->koopa_name);
+                return tmp;
+            }
         }
     }
 
@@ -231,7 +298,8 @@ public:
     std::string op;
     std::unique_ptr<BaseAST> exp;
 
-    void Dump(std::ostream& os, int indent = 0) const override {
+    void Dump(std::ostream& os, int indent = 0) const override
+    {
         os << make_indent(indent) << "UnaryExpAST { op: " << op << ", exp:\n";
         if (exp) exp->Dump(os, indent+1);
         os << make_indent(indent) << "}\n";
@@ -267,6 +335,54 @@ public:
     }
 
     void SemanticCheck(SymbolTable &) override {}
+};
+
+class FuncCallAST : public BaseAST
+{
+public:
+    std::string name;
+    std::vector<std::unique_ptr<BaseAST>> args;
+
+    void Dump(std::ostream& os, int indent = 0) const override
+    {
+        os << make_indent(indent) << "FuncCallAST " << name << "\n";
+        for (auto& a : args) a->Dump(os, indent+1);
+    }
+    std::string EmitKoopa(std::vector<std::string>& code, SymbolTable& symtab) const override
+    {
+        auto *info = symtab.lookup(name);
+        if (!info || info->type != FUNCTION)
+            throw std::runtime_error("未定义函数: " + name);
+
+        std::string args_str;
+        for (auto& a : args)
+        {
+            args_str += a->EmitKoopa(code, symtab) + ", ";
+        }
+        if (!args_str.empty())
+            args_str = args_str.substr(0, args_str.size()-2);
+
+        if (info->ret_type == "void")
+        {
+            code.push_back("call @" + name + "(" + args_str + ")");
+            return "";
+        }
+        else
+        {
+            std::string res = "%" + std::to_string(koopa_tmp_id++);
+            code.push_back(res + " = call @" + name + "(" + args_str + ")");
+            return res;
+        }
+    }
+    void SemanticCheck(SymbolTable& symtab) override
+    {
+        auto *info = symtab.lookup(name);
+        if (!info || info->type != FUNCTION)
+            throw std::runtime_error("未定义函数: " + name);
+        if (args.size() != info->params.size())
+            throw std::runtime_error("函数参数数量不匹配: " + name);
+        for (auto& a : args) a->SemanticCheck(symtab);
+    }
 };
 
 class BinaryExpAST : public BaseAST
@@ -401,25 +517,22 @@ class ExpAST : public BaseAST
 public:
     std::unique_ptr<BaseAST> lor_exp;
 
-    void Dump(std::ostream& os, int indent = 0) const override {
+    void Dump(std::ostream& os, int indent = 0) const override
+    {
         os << make_indent(indent) << "ExpAST {\n";
         if (lor_exp) lor_exp->Dump(os, indent+1);
         os << make_indent(indent) << "}\n";
     }
-
     std::string EmitKoopa(std::vector<std::string> &code, SymbolTable &symtab) const override
     {
         return lor_exp->EmitKoopa(code, symtab);
     }
-
     int ConstEval(SymbolTable &symtab) const override
     {
         return lor_exp->ConstEval(symtab);
     }
-
     void SemanticCheck(SymbolTable &) override {}
 };
-
 // ------ Statement ASTs ------
 
 class StmtAST : public BaseAST
@@ -758,6 +871,7 @@ public:
         std::string name;
         std::unique_ptr<BaseAST> val;
     };
+    bool is_global = false; // 新增：是否为全局常量
     std::vector<Def> defs;
 
     void Dump(std::ostream& os, int indent = 0) const override {
@@ -772,20 +886,22 @@ public:
 
     std::string EmitKoopa(std::vector<std::string> &, SymbolTable &symtab) const override
     {
+        std::cerr << "you should see me in constdecl\n";
         for (const auto &def : defs)
         {
             int v = def.val->ConstEval(symtab);
-            symtab.add(def.name, CONSTANT, v);
+            symtab.add(def.name, CONSTANT, v, "", "", {}, {}, is_global);
         }
+        std::cerr << "constdecl done\n";
         return "";
     }
 
     void SemanticCheck(SymbolTable &symtab) override
     {
-        for (const auto &def : defs)
+        for (auto &def : defs)
         {
             int v = def.val->ConstEval(symtab);
-            if (!symtab.add(def.name, CONSTANT, v))
+            if (!symtab.add(def.name, CONSTANT, v, "", "", {}, {}, is_global))
                 throw std::runtime_error("重复定义: " + def.name);
         }
     }
@@ -800,6 +916,7 @@ public:
         std::unique_ptr<BaseAST> val;
         bool has_init;
     };
+    bool is_global = false; // 新增：是否为全局变量,可以写在外面，因为VarDeclAST是整体的
     std::vector<Def> defs;
 
     void Dump(std::ostream& os, int indent = 0) const override {
@@ -818,28 +935,58 @@ public:
 
     std::string EmitKoopa(std::vector<std::string> &code, SymbolTable &symtab) const override
     {
-        for (const auto &def : defs)
+        if (is_global)
         {
-            std::string alloc_name = symtab.get_unique_name(def.name);
-            code.push_back(alloc_name + " = alloc i32");
-            symtab.add(def.name, VAR, 0, alloc_name);
-            if (def.has_init)
+            std::string koopa_ir_global;
+            for (const auto &def : defs)
             {
-                std::string v = def.val->EmitKoopa(code, symtab);
-                code.push_back("store " + v + ", " + alloc_name);
+                std::cerr << "you should see me in global vardecl\n";
+                // 全局变量分配 Koopa IR
+                std::string koopa_name = "@" + def.name;
+                std::string init_val = def.has_init ? std::to_string(def.val->ConstEval(symtab)) : "zeroinit";
+                koopa_ir_global += "global " + koopa_name + " = alloc i32, " + init_val + "\n";
+                symtab.add(def.name, VAR, def.has_init ? def.val->ConstEval(symtab) : 0, koopa_name, "", {}, {}, true);
             }
+            return koopa_ir_global;
         }
-        return "";
+        else
+        {
+            for (const auto &def : defs)
+            {
+                std::string alloc_name = symtab.get_unique_name(def.name);
+                code.push_back(alloc_name + " = alloc i32");
+                symtab.add(def.name, VAR, 0, alloc_name);
+                if (def.has_init)
+                {
+                    std::string v = def.val->EmitKoopa(code, symtab);
+                    code.push_back("store " + v + ", " + alloc_name);
+                }
+            }
+            return "";
+        }
     }
 
     void SemanticCheck(SymbolTable &symtab) override
     {
-        for (const auto &def : defs)
+        if (is_global)
         {
-            if (def.has_init)
-                def.val->SemanticCheck(symtab);
-            if (!symtab.add(def.name, VAR, 0))
-                throw std::runtime_error("重复定义: " + def.name);
+            for (const auto &def : defs)
+            {
+                std::cerr << "you should see me in global vardecl\n";
+                // 全局变量分配 Koopa IR
+                std::string koopa_name = "@" + def.name;
+                std::string init_val = def.has_init ? std::to_string(def.val->ConstEval(symtab)) : "zeroinit";
+                if (!symtab.add(def.name, VAR, def.has_init ? def.val->ConstEval(symtab) : 0, koopa_name, "", {}, {}, true))
+                    throw std::runtime_error("重复定义: " + def.name);
+            }
+        }
+        else
+        {
+            for (const auto &def : defs)
+            {
+                if (!symtab.add(def.name, VAR, 0, "", "", {}, {}, 0))
+                    throw std::runtime_error("重复定义: " + def.name);
+            }
         }
     }
 };
@@ -891,71 +1038,163 @@ public:
             item->SemanticCheck(local_tab);
     }
 };
-
 // ------ Function ASTs ------
 
+// ------ Function Param AST ------
 class FuncTypeAST : public BaseAST
 {
 public:
     std::string type;
-    void Dump(std::ostream& os, int indent = 0) const override {
+    void Dump(std::ostream& os, int indent = 0) const override
+    {
         os << make_indent(indent) << "FuncTypeAST { " << type << " }\n";
     }
     std::string EmitKoopa(std::vector<std::string> &, SymbolTable &) const override
     {
-        return "i32 ";
+        return type == "int" ? "i32 " : "";
     }
     void SemanticCheck(SymbolTable &) override {}
+};
+
+class FuncFParamAST : public BaseAST
+{
+public:
+    std::string type; // "int"
+    std::string name;
+    void Dump(std::ostream& os, int indent = 0) const override
+    {
+        os << make_indent(indent) << "Param " << type << " " << name << "\n";
+    }
+    std::string EmitKoopa(std::vector<std::string> &, SymbolTable &) const override { return ""; }
+    void SemanticCheck(SymbolTable &) override {}
+};
+
+class FuncFParamsAST : public BaseAST
+{
+public:
+    std::vector<std::unique_ptr<FuncFParamAST>> params;
+    void Dump(std::ostream& os, int indent = 0) const override
+    {
+        for (auto& p : params) p->Dump(os, indent);
+    }
+    std::string EmitKoopa(std::vector<std::string>&, SymbolTable&) const override { return ""; }
+    void SemanticCheck(SymbolTable&) override {}
 };
 
 class FuncDefAST : public BaseAST
 {
 public:
-    std::unique_ptr<BaseAST> func_type;
+    std::string ret_type;
     std::string ident;
+    std::unique_ptr<FuncFParamsAST> params;
     std::unique_ptr<BaseAST> block;
-    void Dump(std::ostream& os, int indent = 0) const override {
-        os << make_indent(indent) << "FuncDefAST {\n";
-        if (func_type) func_type->Dump(os, indent+1);
-        os << make_indent(indent+1) << "name: " << ident << "\n";
-        if (block) block->Dump(os, indent+1);
-        os << make_indent(indent) << "}\n";
-    }
-    std::string EmitKoopa(std::vector<std::string> &code, SymbolTable &symtab) const override
+
+    void Dump(std::ostream& os, int indent = 0) const override
     {
+        os << make_indent(indent) << "FuncDefAST " << ret_type << " " << ident << "\n";
+        if (params) params->Dump(os, indent+1);
+        if (block) block->Dump(os, indent+1);
+    }
+
+    std::string EmitKoopa(std::vector<std::string>& code, SymbolTable& global_tab) const override
+    {
+        std::vector<std::string> param_names, param_types;
+        if (params)
+        {
+            for (auto& p : params->params)
+            {
+                param_names.push_back(p->name);
+                param_types.push_back(p->type);
+            }
+        }
+        global_tab.add(ident, FUNCTION, 0, "", ret_type, param_names, param_types);
+
         koopa_tmp_id = 0;
         code.clear();
-        symtab.scope_id = 1;
-        symtab.var_cnt = 0;
+
+        std::string params_str;
+        for (size_t i = 0; i < param_names.size(); ++i)
+        {
+            params_str += "@" + param_names[i] + ": ";
+            if (param_types[i] == "int")
+                params_str += "i32";
+            else if (param_types[i] == "int[]")
+                params_str += "*i32";
+            // 可扩展更多类型
+            else
+            {
+                std::cerr << "Warning: 未知参数类型 " << param_types[i] << "\n";
+                params_str += "unknown";
+            }
+            params_str += ", ";
+        }
+        if (!params_str.empty())
+        {
+            params_str = params_str.substr(0, params_str.size() - 2);
+        }
+
+        std::string func_head = "fun @" + ident + "(" + params_str + ")";
+        if (ret_type == "int")
+        {
+            func_head += ": i32";
+        }
+        func_head += "{\n";
         code.push_back("%entry:");
-        block->EmitKoopa(code, symtab);
+        SymbolTable local_tab(&global_tab);
+        for (size_t i = 0; i < param_names.size(); ++i)
+        {
+            std::string var_name = "%" + param_names[i];
+            code.push_back(var_name + " = alloc i32");
+            local_tab.add(param_names[i], VAR, 0, var_name);
+            code.push_back("store @" + param_names[i] + ", " + var_name);
+        }
+
+        block->EmitKoopa(code, local_tab);
+
+         // void 函数自动添加 ret
+        if (ret_type == "void") 
+        {
+            bool found_ret = false;
+            for (auto it = code.rbegin(); it != code.rend(); it++) 
+            {
+                std::string line = *it;
+                line.erase(0, line.find_first_not_of(" \t"));
+                if (line.substr(0, 3) == "ret") 
+                {
+                    found_ret = true;
+                    break;
+                }
+                if (!line.empty()) break;
+            }
+            if (!found_ret) 
+            {
+                code.push_back("ret");
+            }
+        }
+
         std::string koopa;
-        koopa += "fun @" + ident + "(): " + func_type->EmitKoopa(code, symtab) + "{\n";
+        koopa += func_head;
         koopa += EmitKoopaWithDCE(code);
         koopa += "}\n";
         return koopa;
     }
-    void SemanticCheck(SymbolTable &symtab) override
+
+    void SemanticCheck(SymbolTable& global_tab) override
     {
-        block->SemanticCheck(symtab);
+        std::vector<std::string> param_names, param_types;
+        if (params)
+        {
+            for (auto& p : params->params)
+            {
+                param_names.push_back(p->name);
+                param_types.push_back(p->type);
+            }
+        }
+        if (!global_tab.add(ident, FUNCTION, 0, "", ret_type, param_names, param_types))
+        {
+            throw std::runtime_error("重复定义函数: " + ident);
+        }
+        block->SemanticCheck(global_tab);
     }
 };
 
-class CompUnitAST : public BaseAST
-{
-public:
-    std::unique_ptr<BaseAST> func_def;
-    void Dump(std::ostream& os, int indent = 0) const override {
-        os << make_indent(indent) << "CompUnitAST {\n";
-        if (func_def) func_def->Dump(os, indent+1);
-        os << make_indent(indent) << "}\n";
-    }
-    std::string EmitKoopa(std::vector<std::string> &code, SymbolTable &symtab) const override
-    {
-        return func_def->EmitKoopa(code, symtab);
-    }
-    void SemanticCheck(SymbolTable &symtab) override
-    {
-        func_def->SemanticCheck(symtab);
-    }
-};
